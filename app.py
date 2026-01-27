@@ -125,7 +125,8 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
             f"</voice>"
             f"</speak>"
         )
-        communicate = edge_tts.Communicate(ssml, voice, rate=None, volume=None, pitch=None)
+        # 修正：當使用 SSML 時，不需傳入 rate/volume/pitch 參數，也不要傳 None，直接初始化即可
+        communicate = edge_tts.Communicate(ssml, voice)
     else:
         # 一般模式 (純文字)
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
