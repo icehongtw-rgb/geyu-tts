@@ -5,28 +5,23 @@ import zipfile
 import io
 import re
 import shutil
-import binascii
-import pkg_resources
+import sys
 from xml.sax.saxutils import escape
 
 # --- 1. 環境檢測 ---
 HAS_FFMPEG = False
 HAS_PYDUB = False
 
+# 檢查 FFmpeg
 if shutil.which("ffmpeg"):
     HAS_FFMPEG = True
 
+# 檢查 Pydub
 try:
     from pydub import AudioSegment
     HAS_PYDUB = True
 except ImportError:
     HAS_PYDUB = False
-
-# 獲取 edge-tts 版本
-try:
-    EDGE_TTS_VERSION = pkg_resources.get_distribution("edge-tts").version
-except:
-    EDGE_TTS_VERSION = "Unknown"
 
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
@@ -97,38 +92,41 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v9.0: en-US 標頭 + 結構簡化) ---
+# --- 5. 核心生成邏輯 (v10.0: 崩潰修復 + 標準 XML) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
-    # 一般模式 (不使用 SSML)
+    # 策略 1: 一般模式
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 風格模式 (SSML)
+    # 策略 2: 風格模式 (標準 SSML 構建)
     else:
         escaped_text = escape(text)
         
-        # 判斷是否需要 Prosody 標籤 (如果都是預設值，就省略，減少出錯機率)
+        # 判斷是否需要 Prosody (減少 XML 複雜度)
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 【v9.0 關鍵策略】
-        # 1. xml:lang="en-US"：強制使用寬鬆解析模式 (這是解決"唸代碼"的殺手鐧)
-        # 2. 屬性間保留標準空格
-        # 3. 如果不需要調整語速，就不加 <prosody>
+        # v10.0 修正：使用 zh-CN 作為標準語言標頭，並使用雙引號
+        ssml_parts = [
+            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">',
+            f'<voice name="{voice}">',
+            f'<mstts:express-as style="{style}">',
+        ]
         
-        header = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">'
-        voice_tag = f'<voice name="{voice}">'
-        style_tag = f'<mstts:express-as style="{style}">'
-        
-        content = escaped_text
         if has_prosody:
-            content = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{content}</prosody>'
+            ssml_parts.append(f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">')
+            ssml_parts.append(escaped_text)
+            ssml_parts.append('</prosody>')
+        else:
+            ssml_parts.append(escaped_text)
             
-        footer = '</mstts:express-as></voice></speak>'
+        ssml_parts.append('</mstts:express-as>')
+        ssml_parts.append('</voice>')
+        ssml_parts.append('</speak>')
         
-        # 組合並移除多餘空白
-        clean_ssml = f"{header}{voice_tag}{style_tag}{content}{footer}"
+        # 合並為單行，無隱形字符
+        clean_ssml = "".join(ssml_parts)
         
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
@@ -150,7 +148,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption(f"App v9.0 | Lib v{EDGE_TTS_VERSION}")
+        st.caption("版本：v10.0 (穩定修復版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -210,22 +208,4 @@ def main():
         
         debug_container = st.expander("🔍 批量生成 SSML 檢查", expanded=show_debug)
         
-        with zipfile.ZipFile(zip_buffer, "w") as zf:
-            for i, (fname, txt) in enumerate(items):
-                try:
-                    data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
-                    zf.writestr(f"{fname}.mp3", data)
-                    
-                    if show_debug and dbg.get("is_ssml") and i == 0:
-                        with debug_container:
-                            st.write(f"📝 範例檔案: {fname}")
-                            st.code(dbg["raw_ssml"], language="xml")
-                            
-                except Exception as e:
-                    st.error(f"{fname} 失敗: {e}")
-                prog.progress((i+1)/len(items))
-        st.success("完成！")
-        st.download_button("📥 下載 ZIP", zip_buffer.getvalue(), "audio.zip", "application/zip")
-
-if __name__ == "__main__":
-    main()
+        with zipfile.ZipFile(zip_buffer, "w")
