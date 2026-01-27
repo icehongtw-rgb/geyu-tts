@@ -173,10 +173,17 @@ def main():
     # --- 側邊欄：參數設定 ---
     with st.sidebar:
         st.title("⚙️ 參數設定")
+        # --- 新增版本號顯示 ---
+        st.caption("版本：v1.2 (預設小曉/SSML修復)")
         
         # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
-        category = st.selectbox("語言類別", options=list(VOICES.keys()))
+        # 修改預設 index=1 (對應簡體中文)
+        category = st.selectbox(
+            "語言類別", 
+            options=list(VOICES.keys()),
+            index=1 
+        )
         voice_options = VOICES[category]
         selected_voice_key = st.selectbox(
             "語音角色",
