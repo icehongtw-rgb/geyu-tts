@@ -77,7 +77,7 @@ export default function StreamlitMock() {
   };
 
   return (
-    <div className="min-h-screen bg-[#fafafa] flex font-sans text-zinc-800 selection:bg-zinc-200">
+    <div className="min-h-screen bg-[#fafafa] flex font-sans text-zinc-800 selection:bg-red-100 selection:text-red-900">
       {/* Sidebar Mock - Minimalist Gray */}
       <div className="w-[24rem] bg-white border-r border-zinc-100 p-8 flex flex-col gap-8 shrink-0 overflow-y-auto h-screen sticky top-0 hidden md:flex">
         <div className="space-y-6">
@@ -90,7 +90,7 @@ export default function StreamlitMock() {
             
             {/* Status Badge */}
             <div className="bg-zinc-50 border border-zinc-200 text-zinc-600 px-3 py-2.5 rounded-md text-xs flex items-center gap-2 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
                 <span>Python 環境就緒</span>
             </div>
 
@@ -102,13 +102,13 @@ export default function StreamlitMock() {
                 <div className="flex gap-2">
                     <button 
                         onClick={() => setEngine("edge")}
-                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'edge' ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
+                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'edge' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
                     >
                         Edge TTS
                     </button>
                     <button 
                         onClick={() => setEngine("google")}
-                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'google' ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
+                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'google' ? 'bg-red-50 text-red-600 border-red-200' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
                     >
                         Google TTS
                     </button>
@@ -126,7 +126,7 @@ export default function StreamlitMock() {
                                 <select 
                                     value={category}
                                     onChange={(e) => setCategory(e.target.value)}
-                                    className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                    className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
                                 >
                                     {Object.keys(EDGE_VOICES).map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
@@ -139,7 +139,7 @@ export default function StreamlitMock() {
                                     <select 
                                         value={voice}
                                         onChange={(e) => setVoice(e.target.value)}
-                                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
                                     >
                                         {EDGE_VOICES[category].map(v => (
                                             <option key={v} value={v}>{v}</option>
@@ -157,7 +157,7 @@ export default function StreamlitMock() {
                         
                         <div className="space-y-3">
                             <select 
-                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none cursor-pointer hover:border-zinc-300"
+                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none cursor-pointer hover:border-zinc-300"
                                 value={styleKey}
                                 onChange={(e) => handleStyleChange(e.target.value)}
                             >
@@ -177,39 +177,39 @@ export default function StreamlitMock() {
                             <div className="group">
                                 <div className="flex justify-between text-xs mb-2 text-zinc-600">
                                     <span className="font-medium">語速 Rate</span>
-                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{rate > 0 ? '+' : ''}{rate}%</span>
+                                    <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{rate > 0 ? '+' : ''}{rate}%</span>
                                 </div>
                                 <input 
                                     type="range" min="-100" max="100" 
                                     value={rate} 
                                     onChange={e => { setRate(Number(e.target.value)); setStyleKey('custom'); }} 
-                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
                                 />
                             </div>
                             
                             <div className="group">
                                 <div className="flex justify-between text-xs mb-2 text-zinc-600">
                                     <span className="font-medium">音調 Pitch</span>
-                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{pitch > 0 ? '+' : ''}{pitch}Hz</span>
+                                    <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{pitch > 0 ? '+' : ''}{pitch}Hz</span>
                                 </div>
                                 <input 
                                     type="range" min="-100" max="100" 
                                     value={pitch} 
                                     onChange={e => { setPitch(Number(e.target.value)); setStyleKey('custom'); }} 
-                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
                                 />
                             </div>
 
                             <div className="group">
                                 <div className="flex justify-between text-xs mb-2 text-zinc-600">
                                     <span className="font-medium">音量 Volume</span>
-                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{volume > 0 ? '+' : ''}{volume}%</span>
+                                    <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{volume > 0 ? '+' : ''}{volume}%</span>
                                 </div>
                                 <input 
                                     type="range" min="-50" max="50" 
                                     value={volume} 
                                     onChange={e => setVolume(Number(e.target.value))} 
-                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
                                 />
                             </div>
                         </div>
@@ -230,7 +230,7 @@ export default function StreamlitMock() {
                         <select 
                             value={googleLang}
                             onChange={(e) => setGoogleLang(e.target.value)}
-                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
                         >
                             {Object.keys(GOOGLE_LANGS).map(l => (
                                 <option key={l} value={l}>{l}</option>
@@ -244,7 +244,7 @@ export default function StreamlitMock() {
                                 type="checkbox" 
                                 checked={googleSlow} 
                                 onChange={e => setGoogleSlow(e.target.checked)}
-                                className="w-4 h-4 accent-black rounded border-zinc-300 focus:ring-zinc-500"
+                                className="w-4 h-4 accent-red-500 rounded border-zinc-300 focus:ring-red-500"
                             />
                             <div className="flex flex-col">
                                 <span className="text-sm font-medium text-zinc-700 group-hover:text-black">慢速模式</span>
@@ -261,7 +261,7 @@ export default function StreamlitMock() {
                         type="checkbox" 
                         checked={trimSilence} 
                         onChange={e => setTrimSilence(e.target.checked)}
-                        className="w-4 h-4 accent-black rounded border-zinc-300 focus:ring-zinc-500"
+                        className="w-4 h-4 accent-red-500 rounded border-zinc-300 focus:ring-red-500"
                     />
                     <div className="flex flex-col">
                         <span className="text-sm font-medium text-zinc-700 group-hover:text-black">智能去靜音</span>
@@ -276,10 +276,10 @@ export default function StreamlitMock() {
       <div className="flex-1 p-8 md:p-16 max-w-7xl mx-auto space-y-12 overflow-y-auto">
         <header className="space-y-4 pb-8 border-b border-zinc-100">
             <div className="flex items-center gap-3 mb-2">
-                 <div className="bg-black text-white p-2 rounded-lg">
+                 <div className="bg-red-500 text-white p-2 rounded-lg shadow-sm shadow-red-200">
                     <Zap className="w-5 h-5" />
                  </div>
-                 <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">Geyu Studio</span>
+                 <span className="text-xs font-bold text-red-500 tracking-wider uppercase">Geyu Studio</span>
             </div>
             <h1 className="text-4xl md:text-5xl font-extrabold text-zinc-900 tracking-tight">
                 兒童語音合成工具
@@ -295,12 +295,12 @@ export default function StreamlitMock() {
                     <h3 className="text-xl font-bold text-zinc-800 flex items-center gap-2">
                         輸入內容
                     </h3>
-                    <span className="text-xs text-zinc-400 font-mono bg-zinc-100 px-2 py-1 rounded">Format: ID Content</span>
+                    <span className="text-xs text-red-600 font-mono bg-red-50 px-2 py-1 rounded border border-red-100">Format: ID Content</span>
                 </div>
                 
                 <div className="relative group">
                     <textarea 
-                        className="w-full h-[500px] p-6 border border-zinc-200 rounded-xl font-mono text-sm leading-8 text-zinc-700 focus:border-black focus:ring-1 focus:ring-black outline-none resize-none shadow-sm transition-all bg-white placeholder:text-zinc-300"
+                        className="w-full h-[500px] p-6 border border-zinc-200 rounded-xl font-mono text-sm leading-8 text-zinc-700 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none resize-none shadow-sm transition-all bg-white placeholder:text-zinc-300"
                         placeholder={`001 蘋果\n002 香蕉\n1-1 這是第一課的內容\nintroduction Welcome to the class`}
                         value={text}
                         onChange={e => setText(e.target.value)}
@@ -353,7 +353,7 @@ export default function StreamlitMock() {
                     disabled={!text}
                     className={`w-full py-5 rounded-xl font-bold text-sm tracking-widest uppercase transition-all shadow-xl transform flex items-center justify-center gap-3 ${
                         text 
-                        ? 'bg-black text-white hover:bg-zinc-900 hover:-translate-y-1 hover:shadow-2xl' 
+                        ? 'bg-red-500 text-white hover:bg-red-600 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-200' 
                         : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
                     }`}
                 >

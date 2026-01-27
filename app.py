@@ -23,7 +23,7 @@ except ImportError:
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
-# Minimalist Monochrome CSS with Deep Overrides
+# Clean White/Red CSS (Reverted forced Black styles for components)
 st.markdown("""
     <style>
     /* --- GLOBAL RESET --- */
@@ -33,154 +33,48 @@ st.markdown("""
         font-family: 'Inter', system-ui, sans-serif;
     }
     
-    /* --- 1. REMOVE RED FROM DROPDOWNS (Selectbox) --- */
-    /* Normal state */
-    div[data-baseweb="select"] > div {
-        background-color: #ffffff !important;
-        border-color: #e4e4e7 !important; /* Zinc-200 */
-        color: #18181b !important;
-    }
-    /* Hover state */
-    div[data-baseweb="select"] > div:hover {
-        border-color: #a1a1aa !important; /* Zinc-400 */
-    }
-    /* Focus/Active state (The "Red Flash" Fix) */
-    div[data-baseweb="select"] > div:focus-within,
-    div[data-baseweb="select"] > div:active {
-        border-color: #18181b !important; /* Black */
-        box-shadow: 0 0 0 1px #18181b !important;
-    }
-    /* Dropdown menu items selection color */
-    li[aria-selected="true"] {
-        background-color: #f4f4f5 !important; /* Zinc-100 */
-        color: #18181b !important;
-    }
-
-    /* --- 2. REMOVE RED FROM TEXTAREAS & INPUTS --- */
-    .stTextArea textarea { 
-        min-height: 500px !important;
-        border-radius: 0.75rem !important;
-        border: 1px solid #e4e4e7 !important;
-        background-color: #ffffff !important;
-        font-family: monospace !important;
-        caret-color: #18181b !important; /* Cursor color */
-        padding: 1.5rem !important;
-        line-height: 2rem !important;
-        font-size: 0.875rem !important;
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
-    }
-    /* Focus state */
-    .stTextArea textarea:focus {
-        border-color: #18181b !important;
-        box-shadow: 0 0 0 1px #18181b !important;
-    }
-
-    /* --- 3. REMOVE RED FROM SLIDERS --- */
-    /* The Thumb (Handle) */
-    div[data-baseweb="slider"] div[role="slider"] {
-        background-color: #18181b !important;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
-    }
-    /* The Filled Track (Progress) */
-    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 75, 75)"] {
-        background-color: #18181b !important;
-    }
-    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 74, 75)"] { 
-        background-color: #18181b !important;
-    }
-    div[data-baseweb="slider"] > div > div > div > div {
-        background-color: #18181b !important;
-    }
-
-    /* --- 4. REMOVE RED FROM CHECKBOXES --- */
-    div[data-baseweb="checkbox"] span[class*="Checked"] {
-        background-color: #18181b !important;
-        border-color: #18181b !important;
-    }
-    div[data-baseweb="checkbox"] span[class*="Checked"] div {
-        color: #ffffff !important;
-    }
-    div[data-baseweb="checkbox"]:focus-within span {
-        box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.2) !important;
-    }
-    
-    /* --- 5. REMOVE RED FROM RADIO BUTTONS (Used for Engine) --- */
-    div[data-baseweb="radio"] div[class*="Checked"] {
-        background-color: #18181b !important;
-    }
-    div[data-baseweb="radio"] div[class*="RadioMarkInner"] {
-         background-color: #ffffff !important;
-    }
-    /* Focus halo */
-    div[data-baseweb="radio"]:focus-within span {
-         background-color: transparent !important; /* hide default halo */
-    }
-
-    /* --- 6. BUTTON STYLES --- */
-    div.stButton > button, div.stDownloadButton > button {
-        width: 100%;
-        background-color: #18181b !important;
-        color: white !important;
-        border-radius: 0.75rem !important;
-        border: none !important;
-        padding: 1rem !important;
-        font-weight: 700 !important;
-        letter-spacing: 0.1em !important;
-        text-transform: uppercase !important;
-        font-size: 0.875rem !important;
-        transition: all 0.2s !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
-    }
-    div.stButton > button:hover, div.stDownloadButton > button:hover {
-        background-color: #000000 !important;
-        transform: translateY(-2px);
-        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
-    }
-    div.stButton > button:disabled {
-        background-color: #f4f4f5 !important;
-        color: #a1a1aa !important;
-        cursor: not-allowed;
-        box-shadow: none !important;
-        transform: none !important;
-    }
-
-    /* --- 7. ALERTS --- */
-    .stProgress > div > div > div > div {
-        background-color: #18181b !important;
-    }
-    div[data-baseweb="notification"], div[data-testid="stAlert"] {
-        background-color: #f4f4f5 !important;
-        border: 1px solid #e4e4e7 !important;
-        color: #18181b !important;
-    }
-    div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
-        fill: #18181b !important;
-        color: #18181b !important;
-    }
-
-    /* --- SIDEBAR --- */
+    /* --- SIDEBAR BACKGROUND --- */
     [data-testid="stSidebar"] {
         background-color: #fafafa;
         border-right: 1px solid #f4f4f5;
     }
+
+    /* --- ALERTS --- */
+    div[data-baseweb="notification"], div[data-testid="stAlert"] {
+        background-color: #fef2f2 !important; /* Red-50 */
+        border: 1px solid #fee2e2 !important; /* Red-100 */
+        color: #991b1b !important; /* Red-800 */
+    }
+    div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
+        fill: #ef4444 !important; /* Red-500 */
+        color: #ef4444 !important;
+    }
+
+    /* --- CUSTOM STATUS BADGES --- */
     .status-ok { 
-        background-color: #f4f4f5; 
-        color: #52525b; 
+        background-color: #f0fdf4; /* Green-50 */
+        color: #166534; /* Green-800 */
         padding: 0.75rem; 
         border-radius: 8px; 
         margin-bottom: 15px; 
-        border: 1px solid #e4e4e7;
+        border: 1px solid #bbf7d0;
         font-size: 0.9rem;
         display: flex; align-items: center; gap: 8px;
     }
     .status-err { 
-        background-color: #f4f4f5; 
-        color: #52525b; 
+        background-color: #fef2f2; /* Red-50 */
+        color: #991b1b; /* Red-800 */
         padding: 0.75rem; 
         border-radius: 8px; 
         margin-bottom: 15px; 
-        border: 1px solid #e4e4e7;
+        border: 1px solid #fee2e2;
         font-size: 0.9rem;
+    }
+
+    /* --- TEXT AREA TWEAK (Optional: Just removing the red border radius if needed, but keeping red focus) --- */
+    .stTextArea textarea { 
+        border-radius: 0.75rem !important;
+        font-family: monospace !important;
     }
     </style>
 """, unsafe_allow_html=True)
