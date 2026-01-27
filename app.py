@@ -105,10 +105,10 @@ STYLES = {
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.6 修正:
-    1. 將 xmlns:mstts 移至 express-as 標籤，保持 speak 標籤乾淨，避免 edge-tts 偵測失敗。
-    2. 回歸使用單引號 '，與 edge-tts 內部格式完全一致。
-    3. 移除多餘的 prosody 標籤（如果參數未變更）。
+    v1.7 修正:
+    1. 採用 Gemini 建議：完全移除 xml:lang。
+    2. Header 簡化：將 xmlns 定義在根 speak 標籤。
+    3. 全面使用單引號 '。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -119,12 +119,6 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     else:
         escaped_text = escape(text)
         
-        # 動態提取語言代碼
-        try:
-            lang_code = "-".join(voice.split("-")[:2])
-        except:
-            lang_code = "en-US"
-
         # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
@@ -134,20 +128,19 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         else:
             content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
 
-        # 構建完整 SSML (v1.6: 命名空間下移，使用單引號)
-        # 這裡將 xmlns:mstts 放在 express-as 標籤上，讓 speak 標籤看起來像標準的 edge-tts 輸出
+        # 構建完整 SSML (v1.7: 極簡化 Header，單引號，無 xml:lang)
         ssml_parts = [
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{lang_code}'>",
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
             f"<voice name='{voice}'>",
-            f"<mstts:express-as xmlns:mstts='https://www.w3.org/2001/mstts' style='{style}'>",
+            f"<mstts:express-as style='{style}'>",
             content_part,
             "</mstts:express-as>",
             "</voice>",
             "</speak>"
         ]
         
-        # 使用空字串連接，確保是一整行緊湊的字串
-        final_ssml = "".join(ssml_parts)
+        # 使用空字串連接，並 strip 確保無前後空白
+        final_ssml = "".join(ssml_parts).strip()
         
         communicate = edge_tts.Communicate(final_ssml, voice)
 
@@ -187,7 +180,7 @@ def main():
     # --- 側邊欄：參數設定 ---
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v1.6 (命名空間隔離修復)")
+        st.caption("版本：v1.7 (SSML 極簡化修復版)")
         
         # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
