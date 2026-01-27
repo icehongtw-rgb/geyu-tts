@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Info, Bug } from 'lucide-react';
+import { Info, Bug, Scissors } from 'lucide-react';
 
 // --- Data ported from app.py for accurate preview ---
 const VOICES: Record<string, string[]> = {
@@ -79,6 +79,7 @@ export default function StreamlitMock() {
   const [style, setStyle] = useState("預設 (General)");
   const [text, setText] = useState("");
   const [showDebug, setShowDebug] = useState(false);
+  const [trimSilence, setTrimSilence] = useState(false);
   
   // Update voice when category changes
   useEffect(() => {
@@ -108,7 +109,7 @@ export default function StreamlitMock() {
                 ⚙️ 參數設定
             </h2>
             {/* Added Version Label */}
-            <p className="text-xs text-slate-500 -mt-2">版本：v1.7 (SSML 極簡化修復版)</p>
+            <p className="text-xs text-slate-500 -mt-2">版本：v1.8 (新增靜音去除)</p>
             
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-600">1. 選擇聲音</h3>
@@ -202,17 +203,32 @@ export default function StreamlitMock() {
             
             <hr className="border-slate-100" />
             
-            <div className="flex items-center gap-2">
-                <input 
-                    type="checkbox" 
-                    id="debug" 
-                    checked={showDebug} 
-                    onChange={e => setShowDebug(e.target.checked)}
-                    className="w-4 h-4 accent-[#ff4b4b]"
-                />
-                <label htmlFor="debug" className="text-xs text-slate-700 cursor-pointer select-none">顯示 SSML (除錯用)</label>
+            <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="trim" 
+                        checked={trimSilence} 
+                        onChange={e => setTrimSilence(e.target.checked)}
+                        className="w-4 h-4 accent-[#ff4b4b]"
+                    />
+                    <label htmlFor="trim" className="text-xs text-slate-700 cursor-pointer select-none flex items-center gap-1">
+                        <Scissors className="w-3 h-3" /> ✨ 自動去除頭尾靜音
+                    </label>
+                </div>
+                
+                <div className="flex items-center gap-2">
+                    <input 
+                        type="checkbox" 
+                        id="debug" 
+                        checked={showDebug} 
+                        onChange={e => setShowDebug(e.target.checked)}
+                        className="w-4 h-4 accent-[#ff4b4b]"
+                    />
+                    <label htmlFor="debug" className="text-xs text-slate-700 cursor-pointer select-none">顯示 SSML (除錯用)</label>
+                </div>
             </div>
-            <p className="text-xs text-slate-500">若遇到 'speak version...' 朗讀問題，請開啟此選項並截圖回報。</p>
+            <p className="text-xs text-slate-500 mt-1">若遇到 'speak version...' 朗讀問題，請開啟此選項並截圖回報。</p>
         </div>
       </div>
 

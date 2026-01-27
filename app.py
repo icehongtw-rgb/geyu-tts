@@ -6,6 +6,13 @@ import io
 import re
 from xml.sax.saxutils import escape
 
+# 嘗試導入 pydub，若失敗則標記不可用
+try:
+    from pydub import AudioSegment
+    HAS_PYDUB = True
+except ImportError:
+    HAS_PYDUB = False
+
 # 設定頁面配置
 st.set_page_config(
     page_title="格育 - 兒童語音合成工具 (Edge-TTS 專業版)",
@@ -102,33 +109,61 @@ STYLES = {
     "chat": "閒聊 (Chat)",
 }
 
-async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
+def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
+    """
+    使用 pydub 去除頭尾靜音
+    """
+    if not HAS_PYDUB:
+        return audio_bytes, "未安裝 pydub"
+    
+    try:
+        # 載入音訊
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
+        
+        def detect_leading_silence(sound, silence_threshold=silence_thresh, chunk_size=chunk_size):
+            trim_ms = 0
+            while trim_ms < len(sound) and sound[trim_ms:trim_ms+chunk_size].dBFS < silence_threshold:
+                trim_ms += chunk_size
+            return trim_ms
+
+        start_trim = detect_leading_silence(audio)
+        end_trim = detect_leading_silence(audio.reverse())
+        
+        duration = len(audio)
+        # 避免切過頭
+        if start_trim + end_trim >= duration:
+            return audio_bytes, "靜音過多，保留原檔"
+            
+        trimmed_audio = audio[start_trim:duration-end_trim]
+        
+        # 匯出
+        out_io = io.BytesIO()
+        trimmed_audio.export(out_io, format="mp3")
+        return out_io.getvalue(), None
+
+    except Exception as e:
+        # 通常是找不到 ffmpeg
+        return audio_bytes, f"處理失敗 (可能未安裝 FFmpeg): {str(e)}"
+
+async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.7 修正:
-    1. 採用 Gemini 建議：完全移除 xml:lang。
-    2. Header 簡化：將 xmlns 定義在根 speak 標籤。
-    3. 全面使用單引號 '。
+    v1.7 fix: 單引號 + 極簡 Header
+    v1.8 fix: 支援去除靜音
     """
     
-    # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
+    # --- SSML 生成邏輯 (保持 v1.7 的修復) ---
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
-        
-    # 策略 2: 高級模式 (Advanced Mode) - 適用於特殊情感
     else:
         escaped_text = escape(text)
-        
-        # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建 Prosody 部分 (單引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
             content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
 
-        # 構建完整 SSML (v1.7: 極簡化 Header，單引號，無 xml:lang)
         ssml_parts = [
             f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
             f"<voice name='{voice}'>",
@@ -138,57 +173,52 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
             "</voice>",
             "</speak>"
         ]
-        
-        # 使用空字串連接，並 strip 確保無前後空白
         final_ssml = "".join(ssml_parts).strip()
-        
         communicate = edge_tts.Communicate(final_ssml, voice)
 
+    # --- 獲取原始音訊 ---
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             audio_data.write(chunk["data"])
+    
+    raw_bytes = audio_data.getvalue()
+    debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
+
+    # --- v1.8: 後製去除靜音 ---
+    if remove_silence:
+        processed_bytes, error_msg = trim_silence(raw_bytes)
+        if error_msg:
+            return processed_bytes, f"{debug_info}\n[Warning] 去除靜音失敗: {error_msg}"
+        return processed_bytes, debug_info
             
-    return audio_data.getvalue(), (communicate._text if hasattr(communicate, '_text') else "SSML Hidden")
+    return raw_bytes, debug_info
 
 def parse_input(text):
-    """
-    解析輸入文本
-    """
     items = []
     lines = text.split('\n')
     for line in lines:
         line = line.strip()
         if not line:
             continue
-            
         match = re.match(r'^(\S+)\s+(.+)$', line)
-        
         if match:
             filename_raw = match.group(1)
             content = match.group(2)
             filename = filename_raw.replace('.mp3', '').replace('.wav', '')
-            
-            items.append({
-                "filename": filename,
-                "text": content,
-                "status": "pending"
-            })
+            items.append({"filename": filename, "text": content, "status": "pending"})
     return items
 
 def main():
-    # --- 側邊欄：參數設定 ---
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v1.7 (SSML 極簡化修復版)")
+        st.caption("版本：v1.8 (新增靜音去除)")
         
-        # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
         category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
         voice_options = VOICES[category]
         selected_voice_key = st.selectbox("語音角色", options=list(voice_options.keys()), format_func=lambda x: voice_options[x])
 
-        # 2. 語音細節調整
         st.subheader("2. 語音調整")
         speed_val = st.slider("語速 (Rate)", -50, 100, 0, format="%d%%", step=5)
         rate_str = f"{'+' if speed_val >= 0 else ''}{speed_val}%"
@@ -199,7 +229,6 @@ def main():
         pitch_val = st.slider("音調 (Pitch)", -50, 50, 0, format="%dHz", step=5)
         pitch_str = f"{'+' if pitch_val >= 0 else ''}{pitch_val}Hz"
 
-        # 3. 進階功能
         st.subheader("3. 進階 (Advanced)")
         supports_style = selected_voice_key in VOICES_WITH_STYLE
         
@@ -213,11 +242,10 @@ def main():
         
         st.markdown("---")
         
-        # 除錯模式開關
+        # v1.8 新功能
+        remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg。可去除音檔前後多餘的空白。")
         show_debug = st.checkbox("顯示 SSML (除錯用)", value=False)
-        st.caption("若遇到 'speak version...' 朗讀問題，請開啟此選項並截圖回報。")
 
-    # --- 主區域 ---
     st.title("🧩 格育 - 兒童語音合成工具 (Edge-TTS)")
     st.markdown("使用微軟 **Edge-TTS** 引擎，完全免費、無額度限制，支援批量生成與自動命名。")
 
@@ -231,7 +259,6 @@ def main():
             placeholder="001 蘋果\n002 香蕉\n1-1 這是第一課的內容\nintroduction Welcome to the class",
             help="系統會自動將第一段文字作為檔名 (例如 '001')，後面的文字作為內容。"
         )
-        
         items = parse_input(input_text)
         
         if len(items) > 0:
@@ -251,20 +278,22 @@ def main():
             else:
                 with st.spinner("生成中..."):
                     try:
-                        audio_bytes, debug_ssml = asyncio.run(generate_audio_stream(
-                            preview_text, selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key
+                        audio_bytes, debug_info = asyncio.run(generate_audio_stream(
+                            preview_text, selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key, remove_silence_opt
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
-                        if show_debug and selected_style_key != "general":
-                            st.text_area("Debug SSML", debug_ssml, height=150)
+                        
+                        if "[Warning]" in str(debug_info):
+                            st.warning(str(debug_info).split('\n')[-1])
+                        elif show_debug:
+                            st.text_area("Debug Info", debug_info, height=150)
+                            
                     except Exception as e:
                         st.error(f"錯誤: {str(e)}")
 
     st.divider()
 
-    # --- 批量生成區 ---
     if st.button("🚀 開始批量生成 (ZIP下載)", type="primary", use_container_width=True, disabled=len(items) == 0):
-        
         progress_bar = st.progress(0)
         status_text = st.empty()
         log_container = st.container()
@@ -276,26 +305,25 @@ def main():
         with zipfile.ZipFile(zip_buffer, "w", zipfile.ZIP_DEFLATED) as zip_file:
             for i, item in enumerate(items):
                 status_text.text(f"正在處理 ({i+1}/{len(items)}): {item['filename']}...")
-                
                 try:
-                    # 生成音訊
-                    audio_bytes, _ = asyncio.run(generate_audio_stream(
-                        item['text'], selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key
+                    audio_bytes, err_msg = asyncio.run(generate_audio_stream(
+                        item['text'], selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key, remove_silence_opt
                     ))
                     
+                    if "[Warning]" in str(err_msg):
+                         with log_container:
+                            st.warning(f"⚠️ {item['filename']}: {str(err_msg).split('Warning] ')[-1]}")
+
                     file_name_in_zip = f"{item['filename']}.mp3"
                     zip_file.writestr(file_name_in_zip, audio_bytes)
                     success_count += 1
-                    
                 except Exception as e:
                     fail_count += 1
                     with log_container:
                         st.error(f"❌ {item['filename']} 失敗: {str(e)}")
-                
                 progress_bar.progress((i + 1) / len(items))
 
         status_text.success(f"🎉 處理完成！成功: {success_count}, 失敗: {fail_count}")
-        
         zip_buffer.seek(0)
         st.download_button(
             label=f"📥 下載 ZIP 壓縮檔 ({len(items)} 個檔案)",
