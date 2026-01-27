@@ -141,11 +141,14 @@ st.markdown("""
     .stProgress > div > div > div > div {
         background-color: #18181b !important;
     }
+    
+    /* Ensure Error/Success/Info boxes are gray/monochrome */
     div[data-baseweb="notification"], div[data-testid="stAlert"] {
         background-color: #f4f4f5 !important;
         border: 1px solid #e4e4e7 !important;
         color: #18181b !important;
     }
+    /* Icon colors in alerts */
     div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
         fill: #18181b !important;
         color: #18181b !important;
@@ -183,9 +186,10 @@ VOICES = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
-        "zh-CN-XiaohanNeural": "🇨🇳 曉涵 (女聲 - 溫暖)",
+        # "zh-CN-XiaohanNeural": "🇨🇳 曉涵 (女聲 - 溫暖)",  <-- REMOVED: Invalid Voice
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
         "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
+        "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)", # Added Alternative
     },
     "繁體中文 (台灣)": {
         "zh-TW-HsiaoChenNeural": "🇹🇼 曉臻 (女聲 - 溫柔/標準)",
