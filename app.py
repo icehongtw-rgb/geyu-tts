@@ -28,10 +28,12 @@ st.markdown("""
     .status-ok { background-color: #dcfce7; color: #166534; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #bbf7d0;}
     .status-err { background-color: #fee2e2; color: #991b1b; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #fecaca;}
     .debug-box { font-family: monospace; font-size: 0.8rem; background: #e2e8f0; padding: 5px; border-radius: 3px; margin-top: 5px; }
+    /* 調整輸入框高度 */
+    .stTextArea textarea { min-height: 400px; }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 語音清單 ---
+# --- 3. 數據定義 ---
 VOICES = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
@@ -52,17 +54,16 @@ VOICES = {
     }
 }
 
-# --- 4. 風格模擬參數 (物理外掛) ---
-# 這裡定義了每個風格對應的「語速」和「音調」偏移量
-STYLE_PARAMS = {
+# 風格預設參數庫
+STYLE_PRESETS = {
     "general":      {"rate": 0,   "pitch": 0},
-    "affectionate": {"rate": -15, "pitch": -2}, # 哄孩子：慢一點，低沉溫柔
-    "cheerful":     {"rate": 10,  "pitch": 3},  # 開心：快一點，高亢
-    "gentle":       {"rate": -10, "pitch": 0},  # 溫和：稍慢，平穩
-    "sad":          {"rate": -15, "pitch": -5}, # 悲傷：很慢，低沉
-    "angry":        {"rate": 5,   "pitch": 5},  # 生氣：稍快，高亢
-    "whispering":   {"rate": -20, "pitch": -5}, # 耳語：非常慢
-    "shouting":     {"rate": 5,   "pitch": 8},  # 大喊：高音
+    "affectionate": {"rate": -25, "pitch": -5}, # 哄孩子
+    "cheerful":     {"rate": 15,  "pitch": 5},  # 開心
+    "gentle":       {"rate": -10, "pitch": -2}, # 溫和
+    "sad":          {"rate": -30, "pitch": -8}, # 悲傷
+    "angry":        {"rate": 10,  "pitch": 8},  # 生氣
+    "whispering":   {"rate": -30, "pitch": -10},# 耳語
+    "shouting":     {"rate": 10,  "pitch": 12}, # 大喊
 }
 
 STYLES = {
@@ -75,6 +76,18 @@ STYLES = {
     "whispering": "🤫 耳語 (模擬)",
     "shouting": "📢 大喊 (模擬)",
 }
+
+# --- 4. Session State 初始化 ---
+if 'rate_val' not in st.session_state:
+    st.session_state['rate_val'] = 0
+if 'pitch_val' not in st.session_state:
+    st.session_state['pitch_val'] = 0
+
+def update_sliders():
+    selected_style = st.session_state.style_selection
+    if selected_style in STYLE_PRESETS:
+        st.session_state.rate_val = STYLE_PRESETS[selected_style]["rate"]
+        st.session_state.pitch_val = STYLE_PRESETS[selected_style]["pitch"]
 
 # --- 5. 輔助功能 ---
 def trim_silence(audio_bytes):
@@ -96,21 +109,12 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 6. 核心生成邏輯 (v17.0: 純參數驅動版 - No SSML) ---
-async def generate_audio_stream(text, voice, user_rate, user_volume, user_pitch, style="general", remove_silence=False):
-    # 1. 計算物理參數 (Python 數學計算，不涉及 XML)
-    style_settings = STYLE_PARAMS.get(style, STYLE_PARAMS["general"])
+# --- 6. 核心生成邏輯 (純參數版) ---
+async def generate_audio_stream(text, voice, rate_val, volume_val, pitch_val, remove_silence=False):
+    rate_str = f"{rate_val:+d}%"
+    pitch_str = f"{pitch_val:+d}Hz"
+    volume_str = f"{volume_val:+d}%"
     
-    final_rate_val = user_rate + style_settings["rate"]
-    final_pitch_val = user_pitch + style_settings["pitch"]
-    
-    # 轉成 edge-tts 接受的字串格式
-    rate_str = f"{'+' if final_rate_val >= 0 else ''}{final_rate_val}%"
-    pitch_str = f"{'+' if final_pitch_val >= 0 else ''}{final_pitch_val}Hz"
-    volume_str = f"{'+' if user_volume >= 0 else ''}{user_volume}%"
-    
-    # 2. 【核心改變】直接傳遞參數，完全不構建 SSML
-    # 這樣做 edge-tts 會發送純文本請求，只帶參數頭，微軟絕對不會把參數唸出來
     communicate = edge_tts.Communicate(
         text, 
         voice, 
@@ -126,24 +130,16 @@ async def generate_audio_stream(text, voice, user_rate, user_volume, user_pitch,
     
     final_bytes = audio_data.getvalue()
     
-    # Debug info (顯示我們計算出的參數)
-    debug_info = {
-        "mode": "Pure Text + Params",
-        "style_applied": style,
-        "final_rate": rate_str,
-        "final_pitch": pitch_str
-    }
-
     if remove_silence:
         final_bytes = trim_silence(final_bytes)
         
-    return final_bytes, debug_info
+    return final_bytes
 
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v17.0 (純參數驅動)")
+        st.caption("版本：v19.0 (精簡版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -154,41 +150,28 @@ def main():
         category = st.selectbox("語言", list(VOICES.keys()))
         selected_voice = st.selectbox("角色", list(VOICES[category].keys()), format_func=lambda x: VOICES[category][x])
 
-        st.subheader("2. 調整 (基礎)")
-        rate = st.slider("語速微調", -50, 50, 0, format="%d%%")
-        pitch = st.slider("音調微調", -50, 50, 0, format="%dHz")
-        volume = st.slider("音量", -50, 50, 0, format="%d%%")
+        st.subheader("2. 風格 (自動調整參數)")
+        st.selectbox(
+            "選擇情感預設", 
+            list(STYLES.keys()), 
+            format_func=lambda x: STYLES[x], 
+            index=0,
+            key="style_selection",
+            on_change=update_sliders
+        )
 
-        st.subheader("3. 風格 (模擬)")
-        style = st.selectbox("情感預設", list(STYLES.keys()), format_func=lambda x: STYLES[x], index=0)
-        
-        if style != "general":
-            p = STYLE_PARAMS[style]
-            st.info(f"💡 風格參數：語速 {p['rate']}%, 音調 {p['pitch']}Hz (將疊加於基礎設定)")
+        st.subheader("3. 微調 (可手動修改)")
+        rate = st.slider("語速 (Rate)", -100, 100, key="rate_val", format="%d%%")
+        pitch = st.slider("音調 (Pitch)", -100, 100, key="pitch_val", format="%dHz")
+        volume = st.slider("音量 (Volume)", -100, 100, 0, format="%d%%")
 
         remove_silence_opt = st.checkbox("✨ 自動去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        show_debug = st.checkbox("🔍 顯示參數", value=False)
 
     st.title("🧩 格育 - 兒童語音工具")
     
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        text_input = st.text_area("輸入內容", height=300, placeholder="001 蘋果\n002 香蕉")
+    # 這裡移除了 col1, col2 分欄，直接使用全寬度
+    text_input = st.text_area("輸入內容 (編號 內容)", height=400, placeholder="001 蘋果\n002 香蕉")
     
-    with col2:
-        st.write("試聽區")
-        test_txt = st.text_input("測試句", "小朋友好！")
-        if st.button("生成試聽"):
-            with st.spinner("生成中..."):
-                try:
-                    data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate, volume, pitch, style, remove_silence_opt))
-                    st.audio(data, format='audio/mp3')
-                    if show_debug:
-                         st.write(f"執行模式: {dbg['mode']}")
-                         st.write(f"最終參數: Rate={dbg['final_rate']}, Pitch={dbg['final_pitch']}")
-                except Exception as e:
-                    st.error(f"錯誤: {e}")
-
     items = []
     for line in text_input.split('\n'):
         if line.strip():
@@ -203,7 +186,7 @@ def main():
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
-                    data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate, volume, pitch, style, remove_silence_opt))
+                    data = asyncio.run(generate_audio_stream(txt, selected_voice, rate, volume, pitch, remove_silence_opt))
                     zf.writestr(f"{fname}.mp3", data)
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
