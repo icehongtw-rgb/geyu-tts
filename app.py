@@ -5,7 +5,6 @@ import zipfile
 import io
 import re
 import shutil
-import sys
 import binascii
 from xml.sax.saxutils import escape
 
@@ -91,37 +90,45 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v7.0 萬用修復版) ---
+# --- 5. 核心生成邏輯 (v8.0: 雙引號修復 + 崩潰修復) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "ssml_start_hex": "", "raw_ssml": ""}
     
+    # 策略 1: 一般模式
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
+    
+    # 策略 2: 風格模式 (嚴格的 SSML 雙引號格式)
     else:
         escaped_text = escape(text)
         
-        # 【v7.0 關鍵修復】
-        # 1. xml:lang 強制設為 'en-US' (這是最能騙過 Azure 驗證器的設定)
-        # 2. 屬性全部改用單引號 ' (避免 Python 雙引號轉義問題)
-        # 3. 確保無換行
-        ssml = (
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='en-US'>"
-            f"<voice name='{voice}'>"
-            f"<mstts:express-as style='{style}'>"
-            f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>"
-            f"{escaped_text}"
-            f"</prosody>"
-            f"</mstts:express-as>"
-            f"</voice>"
-            f"</speak>"
-        )
+        # 提取正確的語言代碼 (Azure 要求 zh-CN 或 zh-TW 等)
+        try:
+            lang_code = "-".join(voice.split("-")[:2])
+        except:
+            lang_code = "zh-CN"
+
+        # 【v8.0 關鍵修復】
+        # 1. 外部用單引號 '，內部屬性全部用雙引號 " (微軟強制要求)
+        # 2. 結構緊湊，無換行
+        ssml_parts = [
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">',
+            f'<voice name="{voice}">',
+            f'<mstts:express-as style="{style}">',
+            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">',
+            f'{escaped_text}',
+            f'</prosody>',
+            f'</mstts:express-as>',
+            f'</voice>',
+            f'</speak>'
+        ]
         
-        # 暴力清洗：移除 BOM 和前後空白
-        clean_ssml = ssml.replace('\ufeff', '').strip()
+        # 移除前後空白與 BOM，合併為一行
+        clean_ssml = "".join(ssml_parts).replace('\ufeff', '').strip()
         
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
-        # 記錄前 20 個字符的 Hex 代碼，用來抓隱形字符
+        # 記錄前 20 個字符的 Hex 代碼
         debug_info["ssml_start_hex"] = binascii.hexlify(clean_ssml[:20].encode('utf-8')).decode('utf-8')
         
         communicate = edge_tts.Communicate(clean_ssml, voice)
@@ -141,7 +148,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v7.0 (en-US 單引號版)")
+        st.caption("版本：v8.0 (雙引號穩定版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -167,7 +174,7 @@ def main():
             st.selectbox("情感", ["預設 (General)"], disabled=True)
 
         remove_silence_opt = st.checkbox("✨ 自動去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        show_debug = st.checkbox("🔍 開啟診斷 (若生成錯誤請勾選)", value=True)
+        show_debug = st.checkbox("🔍 開啟診斷", value=True)
 
     st.title("🧩 格育 - 兒童語音工具")
     
@@ -184,9 +191,9 @@ def main():
                     data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     st.audio(data, format='audio/mp3')
                     if show_debug and dbg.get("is_ssml"):
-                         st.markdown(f"SSML Hex Head: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
-                         if not dbg['ssml_start_hex'].startswith("3c737065616b"): # 3c= <, 73=s, 70=p, 65=e, 61=a, 6b=k
-                             st.error("⚠️ 檢測到字串頭部有隱形垃圾字符！")
+                         st.markdown(f"SSML Hex: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
+                         if not dbg['ssml_start_hex'].startswith("3c737065616b"):
+                             st.error("⚠️ 格式異常")
                          st.code(dbg["raw_ssml"], language="xml")
                 except Exception as e:
                     st.error(f"錯誤: {e}")
@@ -199,32 +206,29 @@ def main():
                 items.append((parts[0], parts[1]))
     
     if st.button(f"🚀 批量生成 ({len(items)} 個檔案)", type="primary", disabled=len(items)==0):
-        zip_buf = io.BytesIO()
+        # 修正：這裡正確初始化變量名
+        zip_buffer = io.BytesIO()
         prog = st.progress(0)
         
-        # 創建一個容器來顯示成功/失敗的 SSML 診斷
         debug_container = st.expander("🔍 批量生成診斷報告", expanded=show_debug)
         
+        # 修正：這裡使用正確的變量名 zip_buffer
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
                     data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     zf.writestr(f"{fname}.mp3", data)
                     
-                    # 在批量生成時也顯示診斷，方便查錯
-                    if show_debug and dbg.get("is_ssml") and i == 0: # 只顯示第一個檔案的診斷以免洗版
+                    if show_debug and dbg.get("is_ssml") and i == 0:
                         with debug_container:
                             st.write(f"📝 檔案: {fname}")
-                            st.markdown(f"Hex Head: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
-                            if not dbg['ssml_start_hex'].startswith("3c737065616b"):
-                                st.error("⚠️ 發現隱形字符，請通知工程師！")
                             st.code(dbg["raw_ssml"], language="xml")
                             
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
         st.success("完成！")
-        st.download_button("📥 下載 ZIP", zip_buf.getvalue(), "audio.zip", "application/zip")
+        st.download_button("📥 下載 ZIP", zip_buffer.getvalue(), "audio.zip", "application/zip")
 
 if __name__ == "__main__":
     main()
