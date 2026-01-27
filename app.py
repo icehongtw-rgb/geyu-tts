@@ -12,11 +12,9 @@ from xml.sax.saxutils import escape
 HAS_FFMPEG = False
 HAS_PYDUB = False
 
-# 檢查 FFmpeg
 if shutil.which("ffmpeg"):
     HAS_FFMPEG = True
 
-# 檢查 Pydub
 try:
     from pydub import AudioSegment
     HAS_PYDUB = True
@@ -92,21 +90,27 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v11.0: 暴力強制 SSML 模式) ---
+# --- 5. 核心生成邏輯 (v12.0: ChatGPT 官方參數修正版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
-    # 策略 1: 一般模式
+    # 防呆：如果選了台灣語音但又選了風格，強制切回一般模式
+    if style != "general" and voice not in VOICES_WITH_STYLE:
+        style = "general"
+
+    # 策略 1: 一般模式 (純文本)
     if style == "general":
+        # 這裡不加 ssml=True，完全交給庫去處理純文字
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 策略 2: 風格模式 (強制開啟 SSML)
+    # 策略 2: 風格模式 (明確 SSML)
     else:
         escaped_text = escape(text)
         
+        # 判斷是否需要 Prosody
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 使用最標準的 SSML 結構
+        # 構建標準 SSML (使用 ChatGPT 建議的結構)
         ssml_parts = [
             '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="zh-CN">',
             f'<voice name="{voice}">',
@@ -129,11 +133,10 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
         
-        communicate = edge_tts.Communicate(clean_ssml, voice)
-        
-        # 【關鍵修復】: 強制手動設置內部標記，繞過庫的自動檢測
-        # 這會迫使 edge-tts 相信我們傳入的是 SSML，不進行轉義
-        communicate._ssml = True 
+        # 【關鍵修復點】
+        # 使用 ssml=True 參數 (這不是私有屬性，而是建構函數參數)
+        # 注意：當 ssml=True 時，rate/volume/pitch 參數會被忽略，必須寫在 XML 裡 (上面已經寫了)
+        communicate = edge_tts.Communicate(clean_ssml, voice, ssml=True)
 
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
@@ -150,7 +153,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v11.0 (強制 SSML 模式)")
+        st.caption("版本：v12.0 (ChatGPT 修正版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
