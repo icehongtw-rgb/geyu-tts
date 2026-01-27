@@ -5,6 +5,8 @@ import zipfile
 import io
 import re
 import shutil
+import sys
+import binascii
 from xml.sax.saxutils import escape
 
 # --- 1. 環境檢測 ---
@@ -28,7 +30,7 @@ st.markdown("""
     .stApp { background-color: #f8fafc; }
     .status-ok { background-color: #dcfce7; color: #166534; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #bbf7d0;}
     .status-err { background-color: #fee2e2; color: #991b1b; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #fecaca;}
-    .debug-box { background-color: #1e293b; color: #38bdf8; padding: 10px; border-radius: 5px; font-family: monospace; font-size: 0.8rem; margin-top: 5px; }
+    .hex-debug { font-family: monospace; font-size: 0.8rem; color: #64748b; background: #e2e8f0; padding: 2px 4px; border-radius: 3px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -89,42 +91,38 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v6.0 診斷版) ---
+# --- 5. 核心生成邏輯 (v7.0 萬用修復版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
-    debug_info = {"is_ssml": False, "raw_ssml": "", "check_result": "N/A"}
+    debug_info = {"is_ssml": False, "ssml_start_hex": "", "raw_ssml": ""}
     
-    # 一般模式
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
-    
-    # 風格模式 (SSML)
     else:
         escaped_text = escape(text)
         
-        # 【v6.0 改動】: 移除 xml:lang，使用最簡化的結構，避免干擾
-        # 強制移除所有換行，並使用 strip()
-        ssml_parts = [
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">',
-            f'<voice name="{voice}">',
-            f'<mstts:express-as style="{style}">',
-            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">',
-            f'{escaped_text}',
-            f'</prosody>',
-            f'</mstts:express-as>',
-            f'</voice>',
-            f'</speak>'
-        ]
+        # 【v7.0 關鍵修復】
+        # 1. xml:lang 強制設為 'en-US' (這是最能騙過 Azure 驗證器的設定)
+        # 2. 屬性全部改用單引號 ' (避免 Python 雙引號轉義問題)
+        # 3. 確保無換行
+        ssml = (
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='en-US'>"
+            f"<voice name='{voice}'>"
+            f"<mstts:express-as style='{style}'>"
+            f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>"
+            f"{escaped_text}"
+            f"</prosody>"
+            f"</mstts:express-as>"
+            f"</voice>"
+            f"</speak>"
+        )
         
-        # 暴力清洗：移除所有隱形字符
-        clean_ssml = "".join(ssml_parts).strip()
-        clean_ssml = clean_ssml.replace('\ufeff', '') # 移除 BOM
+        # 暴力清洗：移除 BOM 和前後空白
+        clean_ssml = ssml.replace('\ufeff', '').strip()
         
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
-        
-        # 模擬 edge-tts 的檢測邏輯 (這是關鍵！)
-        check = re.match(r"^\s*<speak", clean_ssml, re.IGNORECASE)
-        debug_info["check_result"] = "✅ 通過 (Library will treat as SSML)" if check else "❌ 失敗 (Library will treat as TEXT)"
+        # 記錄前 20 個字符的 Hex 代碼，用來抓隱形字符
+        debug_info["ssml_start_hex"] = binascii.hexlify(clean_ssml[:20].encode('utf-8')).decode('utf-8')
         
         communicate = edge_tts.Communicate(clean_ssml, voice)
 
@@ -143,12 +141,12 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v6.0 (診斷模式)")
+        st.caption("版本：v7.0 (en-US 單引號版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="status-err">⚠️ 環境缺失 (Python 3.11?)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="status-err">⚠️ 環境缺失 (需 Python 3.11)</div>', unsafe_allow_html=True)
 
         st.subheader("1. 語音")
         category = st.selectbox("語言", list(VOICES.keys()))
@@ -169,7 +167,7 @@ def main():
             st.selectbox("情感", ["預設 (General)"], disabled=True)
 
         remove_silence_opt = st.checkbox("✨ 自動去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        show_debug = st.checkbox("🔍 開啟診斷面板 (除錯用)", value=True) # 預設開啟
+        show_debug = st.checkbox("🔍 開啟診斷 (若生成錯誤請勾選)", value=True)
 
     st.title("🧩 格育 - 兒童語音工具")
     
@@ -185,18 +183,11 @@ def main():
                 try:
                     data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     st.audio(data, format='audio/mp3')
-                    
-                    # 顯示診斷訊息
-                    if show_debug and dbg["is_ssml"]:
-                        st.markdown("### 🔍 診斷報告")
-                        if "✅" in dbg["check_result"]:
-                            st.success(dbg["check_result"])
-                        else:
-                            st.error(dbg["check_result"])
-                        st.markdown("**發送給微軟的原始碼：**")
-                        st.code(dbg["raw_ssml"], language="xml")
-                        st.info("提示：如果上面顯示✅，但聲音還是唸代碼，請截圖此畫面給我。")
-                        
+                    if show_debug and dbg.get("is_ssml"):
+                         st.markdown(f"SSML Hex Head: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
+                         if not dbg['ssml_start_hex'].startswith("3c737065616b"): # 3c= <, 73=s, 70=p, 65=e, 61=a, 6b=k
+                             st.error("⚠️ 檢測到字串頭部有隱形垃圾字符！")
+                         st.code(dbg["raw_ssml"], language="xml")
                 except Exception as e:
                     st.error(f"錯誤: {e}")
 
@@ -210,11 +201,25 @@ def main():
     if st.button(f"🚀 批量生成 ({len(items)} 個檔案)", type="primary", disabled=len(items)==0):
         zip_buf = io.BytesIO()
         prog = st.progress(0)
-        with zipfile.ZipFile(zip_buf, "w") as zf:
+        
+        # 創建一個容器來顯示成功/失敗的 SSML 診斷
+        debug_container = st.expander("🔍 批量生成診斷報告", expanded=show_debug)
+        
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
                     data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     zf.writestr(f"{fname}.mp3", data)
+                    
+                    # 在批量生成時也顯示診斷，方便查錯
+                    if show_debug and dbg.get("is_ssml") and i == 0: # 只顯示第一個檔案的診斷以免洗版
+                        with debug_container:
+                            st.write(f"📝 檔案: {fname}")
+                            st.markdown(f"Hex Head: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
+                            if not dbg['ssml_start_hex'].startswith("3c737065616b"):
+                                st.error("⚠️ 發現隱形字符，請通知工程師！")
+                            st.code(dbg["raw_ssml"], language="xml")
+                            
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
