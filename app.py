@@ -106,9 +106,9 @@ STYLES = {
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.4 修正:
-    1. 針對 Style 模式，強制移除 SSML 中的換行符號，確保字串以 <speak> 開頭。
-    2. 如果 rate/volume/pitch 都是預設值，省略 prosody 標籤以降低 XML 錯誤風險。
+    v1.5 修正:
+    1. 強制將所有 XML 屬性使用雙引號 " (某些解析器不支援單引號)。
+    2. 使用 list join 的方式構建 SSML，確保絕對無換行符號。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -128,26 +128,25 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建 Prosody 部分
+        # 構建 Prosody 部分 (使用雙引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
-            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
+            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
 
-        # 構建完整 SSML
-        # 重要：使用 f-string 但最後要用 .strip() 和 .replace() 確保它是單行且無空格
-        raw_ssml = (
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='{lang_code}'>"
-            f"<voice name='{voice}'>"
-            f"<mstts:express-as style='{style}'>"
-            f"{content_part}"
-            f"</mstts:express-as>"
-            f"</voice>"
-            f"</speak>"
-        )
+        # 構建完整 SSML (嚴格模式：無換行，雙引號)
+        ssml_parts = [
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">',
+            f'<voice name="{voice}">',
+            f'<mstts:express-as style="{style}">',
+            content_part,
+            '</mstts:express-as>',
+            '</voice>',
+            '</speak>'
+        ]
         
-        # 關鍵修正：移除所有換行符，確保 edge-tts 識別為 SSML
-        final_ssml = raw_ssml.strip()
+        # 使用空字串連接，確保是一整行緊湊的字串
+        final_ssml = "".join(ssml_parts)
         
         communicate = edge_tts.Communicate(final_ssml, voice)
 
@@ -189,7 +188,7 @@ def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
         # --- 新增版本號顯示 ---
-        st.caption("版本：v1.4 (SSML 嚴格模式)")
+        st.caption("版本：v1.5 (SSML 雙引號修復版)")
         
         # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
