@@ -1,5 +1,6 @@
 import streamlit as st
 import edge_tts
+from gtts import gTTS
 import asyncio
 import zipfile
 import io
@@ -81,35 +82,41 @@ st.markdown("""
         box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
     }
     /* The Filled Track (Progress) */
-    /* Streamlit uses inline styles for the fill color, usually the primary color. 
-       We use a wildcard style matcher or specific hierarchy to override. */
     div[data-baseweb="slider"] div[style*="background-color: rgb(255, 75, 75)"] {
         background-color: #18181b !important;
     }
-    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 74, 75)"] { /* sometimes slight variation */
+    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 74, 75)"] { 
         background-color: #18181b !important;
     }
-    /* Fallback for newer Streamlit versions: Target the first child div of the track container that has a color */
     div[data-baseweb="slider"] > div > div > div > div {
         background-color: #18181b !important;
     }
 
     /* --- 4. REMOVE RED FROM CHECKBOXES --- */
-    /* Checked State Background */
     div[data-baseweb="checkbox"] span[class*="Checked"] {
         background-color: #18181b !important;
         border-color: #18181b !important;
     }
-    /* Checkmark Icon */
     div[data-baseweb="checkbox"] span[class*="Checked"] div {
         color: #ffffff !important;
     }
-    /* Focus Ring */
     div[data-baseweb="checkbox"]:focus-within span {
         box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.2) !important;
     }
+    
+    /* --- 5. REMOVE RED FROM RADIO BUTTONS (Used for Engine) --- */
+    div[data-baseweb="radio"] div[class*="Checked"] {
+        background-color: #18181b !important;
+    }
+    div[data-baseweb="radio"] div[class*="RadioMarkInner"] {
+         background-color: #ffffff !important;
+    }
+    /* Focus halo */
+    div[data-baseweb="radio"]:focus-within span {
+         background-color: transparent !important; /* hide default halo */
+    }
 
-    /* --- 5. BUTTON STYLES (MATCHING APP.TSX) --- */
+    /* --- 6. BUTTON STYLES --- */
     div.stButton > button, div.stDownloadButton > button {
         width: 100%;
         background-color: #18181b !important;
@@ -137,18 +144,15 @@ st.markdown("""
         transform: none !important;
     }
 
-    /* --- 6. ALERTS & PROGRESS BARS --- */
+    /* --- 7. ALERTS --- */
     .stProgress > div > div > div > div {
         background-color: #18181b !important;
     }
-    
-    /* Ensure Error/Success/Info boxes are gray/monochrome */
     div[data-baseweb="notification"], div[data-testid="stAlert"] {
         background-color: #f4f4f5 !important;
         border: 1px solid #e4e4e7 !important;
         color: #18181b !important;
     }
-    /* Icon colors in alerts */
     div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
         fill: #18181b !important;
         color: #18181b !important;
@@ -181,15 +185,16 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 數據定義 (已重新排序：女聲在前，男聲在後) ---
-VOICES = {
+# --- 3. 數據定義 ---
+
+# EDGE TTS 數據
+VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
-        # "zh-CN-XiaohanNeural": "🇨🇳 曉涵 (女聲 - 溫暖)",  <-- REMOVED: Invalid Voice
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
         "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
-        "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)", # Added Alternative
+        "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)",
     },
     "繁體中文 (台灣)": {
         "zh-TW-HsiaoChenNeural": "🇹🇼 曉臻 (女聲 - 溫柔/標準)",
@@ -203,16 +208,23 @@ VOICES = {
     }
 }
 
-# 風格預設參數庫 (物理模擬法)
+# GOOGLE TTS 數據
+LANG_GOOGLE = {
+    "簡體中文 (zh-cn)": "zh-cn",
+    "繁體中文 (zh-tw)": "zh-tw",
+    "英文 (en)": "en"
+}
+
+# 風格預設 (僅 Edge 有效)
 STYLE_PRESETS = {
     "general":      {"rate": 0,   "pitch": 0},
-    "affectionate": {"rate": -25, "pitch": -5}, # 哄孩子
-    "cheerful":     {"rate": 15,  "pitch": 5},  # 開心
-    "gentle":       {"rate": -10, "pitch": -2}, # 溫和
-    "sad":          {"rate": -30, "pitch": -8}, # 悲傷
-    "angry":        {"rate": 10,  "pitch": 8},  # 生氣
-    "whispering":   {"rate": -30, "pitch": -10},# 耳語
-    "shouting":     {"rate": 10,  "pitch": 12}, # 大喊
+    "affectionate": {"rate": -25, "pitch": -5},
+    "cheerful":     {"rate": 15,  "pitch": 5},
+    "gentle":       {"rate": -10, "pitch": -2},
+    "sad":          {"rate": -30, "pitch": -8},
+    "angry":        {"rate": 10,  "pitch": 8},
+    "whispering":   {"rate": -30, "pitch": -10},
+    "shouting":     {"rate": 10,  "pitch": 12},
 }
 
 STYLES = {
@@ -258,8 +270,8 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 6. 核心生成邏輯 (純參數版) ---
-async def generate_audio_stream(text, voice, rate_val, volume_val, pitch_val, remove_silence=False):
+# --- 6. 核心生成邏輯 (多引擎) ---
+async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False):
     rate_str = f"{rate_val:+d}%"
     pitch_str = f"{pitch_val:+d}Hz"
     volume_str = f"{volume_val:+d}%"
@@ -278,42 +290,70 @@ async def generate_audio_stream(text, voice, rate_val, volume_val, pitch_val, re
             audio_data.write(chunk["data"])
     
     final_bytes = audio_data.getvalue()
+    if remove_silence:
+        final_bytes = trim_silence(final_bytes)
+    return final_bytes
+
+def generate_audio_stream_google(text, lang, slow=False, remove_silence=False):
+    tts = gTTS(text=text, lang=lang, slow=slow)
+    fp = io.BytesIO()
+    tts.write_to_fp(fp)
+    final_bytes = fp.getvalue()
     
     if remove_silence:
         final_bytes = trim_silence(final_bytes)
-        
     return final_bytes
 
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
         st.title("參數設定")
-        st.caption("Version 19.1 / Monochrome")
+        st.caption("Version 1.0 / Dual Engine")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
 
-        st.markdown("### 1. 語音")
-        category = st.selectbox("語言區域", list(VOICES.keys()))
-        selected_voice = st.selectbox("角色選擇", list(VOICES[category].keys()), format_func=lambda x: VOICES[category][x])
+        # 引擎選擇
+        engine = st.radio("TTS 引擎庫", ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"])
 
-        st.markdown("### 2. 風格 (物理模擬)")
-        st.selectbox(
-            "情感預設", 
-            list(STYLES.keys()), 
-            format_func=lambda x: STYLES[x], 
-            index=0,
-            key="style_selection",
-            on_change=update_sliders
-        )
-        st.caption("透過調整語速與音調模擬情感，適用所有角色。")
+        # 根據選擇顯示不同參數
+        if "Edge" in engine:
+            st.markdown("### 1. 語音")
+            category = st.selectbox("語言區域", list(VOICES_EDGE.keys()))
+            selected_voice = st.selectbox("角色選擇", list(VOICES_EDGE[category].keys()), format_func=lambda x: VOICES_EDGE[category][x])
 
-        st.markdown("### 3. 微調")
-        rate = st.slider("語速 (Rate)", -100, 100, key="rate_val", format="%d%%")
-        pitch = st.slider("音調 (Pitch)", -100, 100, key="pitch_val", format="%dHz")
-        volume = st.slider("音量 (Volume)", -100, 100, 0, format="%d%%")
+            st.markdown("### 2. 風格 (物理模擬)")
+            st.selectbox(
+                "情感預設", 
+                list(STYLES.keys()), 
+                format_func=lambda x: STYLES[x], 
+                index=0,
+                key="style_selection",
+                on_change=update_sliders
+            )
+            st.caption("透過調整語速與音調模擬情感。")
+
+            st.markdown("### 3. 微調")
+            rate = st.slider("語速 (Rate)", -100, 100, key="rate_val", format="%d%%")
+            pitch = st.slider("音調 (Pitch)", -100, 100, key="pitch_val", format="%dHz")
+            volume = st.slider("音量 (Volume)", -100, 100, 0, format="%d%%")
+
+        else: # Google TTS
+            st.markdown("### 1. 設定")
+            st.info("Google TTS 穩定免費，但不支援語速(微調)、音調與情感調整。")
+            
+            selected_lang_label = st.selectbox("語言", list(LANG_GOOGLE.keys()))
+            selected_lang_code = LANG_GOOGLE[selected_lang_label]
+            
+            google_slow = st.checkbox("慢速模式 (Slow Mode)", value=False)
+            
+            # 這些是為了兼容下方的函數調用，雖然Google用不到
+            selected_voice = None 
+            rate = 0
+            pitch = 0
+            volume = 0
 
         st.markdown("---")
         remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
@@ -321,7 +361,6 @@ def main():
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
     
-    # 這裡的 placeholder 改用 f-string 來包含換行符號，避免排版問題
     placeholder_txt = "001 蘋果\n002 香蕉\n1-1 第一課\n\n(若未輸入編號，系統將自動產生)"
     text_input = st.text_area("輸入內容 (編號 內容)", height=450, placeholder=placeholder_txt)
     
@@ -329,7 +368,6 @@ def main():
     lines = text_input.split('\n')
     for i, line in enumerate(lines):
         if line.strip():
-            # Robust parsing:
             parts = line.strip().split(maxsplit=1)
             if len(parts) >= 2:
                 items.append((parts[0], parts[1]))
@@ -339,26 +377,26 @@ def main():
     
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 使用 container 來包裹按鈕，雖然 st.button 無法直接 width:100%，但 CSS 會強制覆寫
     if st.button(f"開始批量生成 ({len(items)} 檔案)", type="primary", disabled=len(items)==0):
         zip_buffer = io.BytesIO()
-        
-        # 自定義進度條樣式已在上方 CSS 設定為黑色
         prog = st.progress(0)
         
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
-                    data = asyncio.run(generate_audio_stream(txt, selected_voice, rate, volume, pitch, remove_silence_opt))
+                    data = b""
+                    if "Edge" in engine:
+                        data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt))
+                    else:
+                        # Google TTS
+                        data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt)
+                        
                     zf.writestr(f"{fname}.mp3", data)
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
         
-        # 這裡的 success 樣式已在上方 CSS 設定為灰白配色，不再是綠色
         st.success("生成完成！")
-        
-        # 下載按鈕也會繼承上方的全寬黑按鈕樣式
         st.download_button("下載 ZIP 壓縮檔", zip_buffer.getvalue(), "audio.zip", "application/zip")
 
 if __name__ == "__main__":

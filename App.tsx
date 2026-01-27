@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Info, Sliders, Scissors, Terminal, Zap } from 'lucide-react';
+import { Info, Sliders, Scissors, Terminal, Zap, Server } from 'lucide-react';
 
 // --- Data synchronized with app.py ---
-// Reordered: Female voices first, then Male voices
-const VOICES: Record<string, string[]> = {
+
+// Edge TTS Voices
+const EDGE_VOICES: Record<string, string[]> = {
     "簡體中文 (中國)": [
         "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
         "🇨🇳 小藝 (女聲 - 氣質)",
@@ -23,6 +24,13 @@ const VOICES: Record<string, string[]> = {
     ]
 };
 
+// Google TTS Languages (Simpler)
+const GOOGLE_LANGS: Record<string, string> = {
+    "簡體中文 (zh-cn)": "zh-cn",
+    "繁體中文 (zh-tw)": "zh-tw",
+    "英文 (en)": "en"
+};
+
 const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string }> = {
     "general":      { rate: 0,   pitch: 0,   label: "預設 (General)" },
     "affectionate": { rate: -25, pitch: -5,  label: "❤️ 親切/哄孩子" },
@@ -35,19 +43,27 @@ const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string
 };
 
 export default function StreamlitMock() {
-  const [category, setCategory] = useState("簡體中文 (中國)");
-  const [voice, setVoice] = useState(VOICES["簡體中文 (中國)"][0]);
+  const [engine, setEngine] = useState<"edge" | "google">("edge");
   
+  // Edge State
+  const [category, setCategory] = useState("簡體中文 (中國)");
+  const [voice, setVoice] = useState(EDGE_VOICES["簡體中文 (中國)"][0]);
   const [styleKey, setStyleKey] = useState("general");
   const [rate, setRate] = useState(0);
   const [volume, setVolume] = useState(0);
   const [pitch, setPitch] = useState(0);
+
+  // Google State
+  const [googleLang, setGoogleLang] = useState("簡體中文 (zh-cn)");
+  const [googleSlow, setGoogleSlow] = useState(false);
+
+  // Shared State
   const [text, setText] = useState("");
   const [trimSilence, setTrimSilence] = useState(true);
 
   useEffect(() => {
-    if (VOICES[category]) {
-        setVoice(VOICES[category][0]);
+    if (EDGE_VOICES[category]) {
+        setVoice(EDGE_VOICES[category][0]);
     }
   }, [category]);
 
@@ -69,116 +85,177 @@ export default function StreamlitMock() {
                 <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900 tracking-tight">
                     參數設定
                 </h2>
-                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 19.1 / MONOCHROME</p>
+                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 1.0 / DUAL ENGINE</p>
             </div>
             
-            {/* Status Badge - Neutral Gray */}
+            {/* Status Badge */}
             <div className="bg-zinc-50 border border-zinc-200 text-zinc-600 px-3 py-2.5 rounded-md text-xs flex items-center gap-2 font-medium">
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-400"></span>
                 <span>Python 環境就緒</span>
             </div>
 
-            <div className="space-y-4">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Voice Selection</h3>
-                <div className="space-y-3">
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-zinc-700">語言區域</label>
-                        <select 
-                            value={category}
-                            onChange={(e) => setCategory(e.target.value)}
-                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
-                        >
-                            {Object.keys(VOICES).map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </select>
+            {/* Engine Selection */}
+            <div className="space-y-2">
+                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                    <Server className="w-3 h-3" /> TTS 引擎庫
+                </label>
+                <div className="flex gap-2">
+                    <button 
+                        onClick={() => setEngine("edge")}
+                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'edge' ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
+                    >
+                        Edge TTS
+                    </button>
+                    <button 
+                        onClick={() => setEngine("google")}
+                        className={`flex-1 py-2 px-3 text-xs font-bold rounded-lg border transition-all ${engine === 'google' ? 'bg-zinc-900 text-white border-zinc-900' : 'bg-white text-zinc-600 border-zinc-200 hover:border-zinc-300'}`}
+                    >
+                        Google TTS
+                    </button>
+                </div>
+            </div>
+
+            {/* --- Conditional Render: Edge TTS --- */}
+            {engine === 'edge' && (
+                <>
+                    <div className="space-y-4 pt-4 border-t border-zinc-100">
+                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Voice Selection</h3>
+                        <div className="space-y-3">
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-zinc-700">語言區域</label>
+                                <select 
+                                    value={category}
+                                    onChange={(e) => setCategory(e.target.value)}
+                                    className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                >
+                                    {Object.keys(EDGE_VOICES).map(cat => (
+                                        <option key={cat} value={cat}>{cat}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-sm font-medium text-zinc-700">語音角色</label>
+                                <div className="relative">
+                                    <select 
+                                        value={voice}
+                                        onChange={(e) => setVoice(e.target.value)}
+                                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                    >
+                                        {EDGE_VOICES[category].map(v => (
+                                            <option key={v} value={v}>{v}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-zinc-700">語音角色</label>
-                        <div className="relative">
+
+                    <div className="space-y-4 pt-4 border-t border-zinc-100">
+                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex justify-between items-center">
+                            Style & Tone
+                        </h3>
+                        
+                        <div className="space-y-3">
                             <select 
-                                value={voice}
-                                onChange={(e) => setVoice(e.target.value)}
-                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none cursor-pointer hover:border-zinc-300"
+                                value={styleKey}
+                                onChange={(e) => handleStyleChange(e.target.value)}
                             >
-                                {VOICES[category].map(v => (
-                                    <option key={v} value={v}>{v}</option>
+                                {Object.entries(STYLE_PRESETS).map(([key, config]) => (
+                                    <option key={key} value={key}>{config.label}</option>
                                 ))}
                             </select>
                         </div>
                     </div>
-                </div>
-            </div>
 
-            <div className="space-y-4 pt-4 border-t border-zinc-100">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex justify-between items-center">
-                    Style & Tone
-                </h3>
-                
-                <div className="space-y-3">
-                    <select 
-                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none cursor-pointer hover:border-zinc-300"
-                        value={styleKey}
-                        onChange={(e) => handleStyleChange(e.target.value)}
-                    >
-                        {Object.entries(STYLE_PRESETS).map(([key, config]) => (
-                            <option key={key} value={key}>{config.label}</option>
-                        ))}
-                    </select>
-                    <p className="text-[10px] text-zinc-400 leading-normal">
-                        透過物理模擬 (Physical Simulation) 自動調整語速與音調，適用於所有角色。
-                    </p>
-                </div>
-            </div>
+                    <div className="space-y-6 pt-4 border-t border-zinc-100">
+                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
+                            Fine Tuning
+                        </h3>
+                        
+                        <div className="space-y-5">
+                            <div className="group">
+                                <div className="flex justify-between text-xs mb-2 text-zinc-600">
+                                    <span className="font-medium">語速 Rate</span>
+                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{rate > 0 ? '+' : ''}{rate}%</span>
+                                </div>
+                                <input 
+                                    type="range" min="-100" max="100" 
+                                    value={rate} 
+                                    onChange={e => { setRate(Number(e.target.value)); setStyleKey('custom'); }} 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                />
+                            </div>
+                            
+                            <div className="group">
+                                <div className="flex justify-between text-xs mb-2 text-zinc-600">
+                                    <span className="font-medium">音調 Pitch</span>
+                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{pitch > 0 ? '+' : ''}{pitch}Hz</span>
+                                </div>
+                                <input 
+                                    type="range" min="-100" max="100" 
+                                    value={pitch} 
+                                    onChange={e => { setPitch(Number(e.target.value)); setStyleKey('custom'); }} 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                />
+                            </div>
 
-            <div className="space-y-6 pt-4 border-t border-zinc-100">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                    Fine Tuning
-                </h3>
-                
-                <div className="space-y-5">
-                    <div className="group">
-                        <div className="flex justify-between text-xs mb-2 text-zinc-600">
-                            <span className="font-medium">語速 Rate</span>
-                            <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{rate > 0 ? '+' : ''}{rate}%</span>
+                            <div className="group">
+                                <div className="flex justify-between text-xs mb-2 text-zinc-600">
+                                    <span className="font-medium">音量 Volume</span>
+                                    <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{volume > 0 ? '+' : ''}{volume}%</span>
+                                </div>
+                                <input 
+                                    type="range" min="-50" max="50" 
+                                    value={volume} 
+                                    onChange={e => setVolume(Number(e.target.value))} 
+                                    className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
+                                />
+                            </div>
                         </div>
-                        <input 
-                            type="range" min="-100" max="100" 
-                            value={rate} 
-                            onChange={e => { setRate(Number(e.target.value)); setStyleKey('custom'); }} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
-                        />
                     </div>
-                    
-                    <div className="group">
-                        <div className="flex justify-between text-xs mb-2 text-zinc-600">
-                            <span className="font-medium">音調 Pitch</span>
-                            <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{pitch > 0 ? '+' : ''}{pitch}Hz</span>
-                        </div>
-                        <input 
-                            type="range" min="-100" max="100" 
-                            value={pitch} 
-                            onChange={e => { setPitch(Number(e.target.value)); setStyleKey('custom'); }} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
-                        />
+                </>
+            )}
+
+            {/* --- Conditional Render: Google TTS --- */}
+            {engine === 'google' && (
+                <div className="space-y-4 pt-4 border-t border-zinc-100">
+                     <div className="bg-zinc-50 border border-zinc-200 rounded-md p-3 text-xs text-zinc-500 leading-relaxed">
+                        <span className="font-bold text-zinc-700 block mb-1">關於 Google TTS</span>
+                        完全免費且穩定，但語音較為機械化，且不支援語速（除慢速外）、音調與情感調整。
                     </div>
 
-                    <div className="group">
-                        <div className="flex justify-between text-xs mb-2 text-zinc-600">
-                            <span className="font-medium">音量 Volume</span>
-                            <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{volume > 0 ? '+' : ''}{volume}%</span>
-                        </div>
-                        <input 
-                            type="range" min="-50" max="50" 
-                            value={volume} 
-                            onChange={e => setVolume(Number(e.target.value))} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
-                        />
+                    <div className="space-y-1.5">
+                        <label className="text-sm font-medium text-zinc-700">語言</label>
+                        <select 
+                            value={googleLang}
+                            onChange={(e) => setGoogleLang(e.target.value)}
+                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                        >
+                            {Object.keys(GOOGLE_LANGS).map(l => (
+                                <option key={l} value={l}>{l}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    <div className="pt-2">
+                        <label className="flex items-center gap-3 p-3 rounded-lg border border-transparent hover:bg-zinc-50 hover:border-zinc-100 transition-all cursor-pointer group">
+                            <input 
+                                type="checkbox" 
+                                checked={googleSlow} 
+                                onChange={e => setGoogleSlow(e.target.checked)}
+                                className="w-4 h-4 accent-black rounded border-zinc-300 focus:ring-zinc-500"
+                            />
+                            <div className="flex flex-col">
+                                <span className="text-sm font-medium text-zinc-700 group-hover:text-black">慢速模式</span>
+                                <span className="text-[10px] text-zinc-400">Slow Mode</span>
+                            </div>
+                        </label>
                     </div>
                 </div>
-            </div>
+            )}
             
-            <div className="pt-2">
+            <div className="pt-4 border-t border-zinc-100">
                 <label className="flex items-center gap-3 p-3 rounded-lg border border-transparent hover:bg-zinc-50 hover:border-zinc-100 transition-all cursor-pointer group">
                     <input 
                         type="checkbox" 
@@ -209,8 +286,6 @@ export default function StreamlitMock() {
             </h1>
             <p className="text-zinc-500 max-w-2xl text-lg font-light leading-relaxed">
                 專為教材製作設計的批量生成引擎。
-                <br/>
-                簡單、高效、純淨。
             </p>
         </header>
 
@@ -230,9 +305,6 @@ export default function StreamlitMock() {
                         value={text}
                         onChange={e => setText(e.target.value)}
                     ></textarea>
-                    <div className="absolute bottom-6 right-6 text-xs bg-zinc-100 px-3 py-1.5 rounded-full text-zinc-500 font-medium font-mono pointer-events-none">
-                        {text.split('\n').filter(x=>x.trim()).length} Lines
-                    </div>
                 </div>
                 
                 {!text && (
@@ -252,13 +324,23 @@ export default function StreamlitMock() {
                     <div className="bg-zinc-900 rounded-lg p-4 overflow-hidden shadow-inner">
                          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3 mb-3">
                             <Terminal className="w-3.5 h-3.5 text-zinc-500" />
-                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">edge-tts params</span>
+                            <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
+                                {engine === 'edge' ? 'edge-tts' : 'google-tts'}
+                            </span>
                          </div>
                          <code className="block font-mono text-xs text-zinc-300 leading-loose whitespace-pre-wrap break-all">
-                            <span className="text-zinc-500">voice:</span> <span className="text-white">"{voice.split(' ')[0]}"</span><br/>
-                            <span className="text-zinc-500">rate:</span> <span className="text-white">"{rate > 0 ? '+' : ''}{rate}%"</span><br/>
-                            <span className="text-zinc-500">pitch:</span> <span className="text-white">"{pitch > 0 ? '+' : ''}{pitch}Hz"</span><br/>
-                            <span className="text-zinc-500">volume:</span> <span className="text-white">"{volume > 0 ? '+' : ''}{volume}%"</span>
+                            {engine === 'edge' ? (
+                                <>
+                                    <span className="text-zinc-500">voice:</span> <span className="text-white">"{voice.split(' ')[0]}"</span><br/>
+                                    <span className="text-zinc-500">rate:</span> <span className="text-white">"{rate > 0 ? '+' : ''}{rate}%"</span><br/>
+                                    <span className="text-zinc-500">pitch:</span> <span className="text-white">"{pitch > 0 ? '+' : ''}{pitch}Hz"</span>
+                                </>
+                            ) : (
+                                <>
+                                    <span className="text-zinc-500">lang:</span> <span className="text-white">"{GOOGLE_LANGS[googleLang]}"</span><br/>
+                                    <span className="text-zinc-500">slow:</span> <span className="text-white">{googleSlow ? 'true' : 'false'}</span>
+                                </>
+                            )}
                          </code>
                     </div>
 
@@ -280,14 +362,6 @@ export default function StreamlitMock() {
                 </button>
             </div>
         </div>
-      </div>
-      
-      {/* Floating Preview Warning - Minimalist */}
-      <div className="fixed bottom-6 right-6 bg-white/80 backdrop-blur border border-zinc-200 p-4 rounded-lg shadow-2xl max-w-xs z-50">
-         <div className="flex items-center gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></div>
-            <span className="text-xs font-mono text-zinc-500">UI Preview Mode</span>
-         </div>
       </div>
     </div>
   );
