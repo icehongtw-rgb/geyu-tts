@@ -1,0 +1,5 @@
+{
+  "name": "格育 - 兒童語音合成工具",
+  "description": "製作兒童教學素材的批量語音合成工具。利用 Google Gemini TTS，支援 MP3 輸出、語速調整及批量 ZIP 下載。",
+  "requestFramePermissions": []
+}
