@@ -93,7 +93,6 @@ def trim_silence(audio_bytes):
         start_trim = detect_leading(audio)
         end_trim = detect_leading(audio.reverse())
         
-        # 只要切掉的長度小於總長度，就執行裁切
         if start_trim + end_trim < len(audio):
             trimmed = audio[start_trim:len(audio)-end_trim]
             out = io.BytesIO()
@@ -104,18 +103,24 @@ def trim_silence(audio_bytes):
     
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (雙引號 SSML 修復版) ---
+# --- 5. 核心生成邏輯 (v3.2: 修復 xml:lang) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     # 如果選擇了風格，必須使用 SSML
     if style != "general":
         escaped_text = escape(text)
         
-        # 【關鍵修復】
-        # 1. 這裡全部使用雙引號 " 來包住屬性
-        # 2. 移除了 xml:lang 防止與 voice 衝突
-        # 3. 結構緊湊，沒有多餘換行
+        # 【關鍵修復】: 動態提取語言代碼 (例如 zh-CN)
+        # 這是微軟 API 識別 SSML 的必要條件！沒有這個，它就會把 XML 當文字唸出來。
+        try:
+            lang_code = "-".join(voice.split("-")[:2])
+        except:
+            lang_code = "zh-CN" # 預設值防止崩潰
+
+        # 構建 SSML: 
+        # 1. 補回 xml:lang="{lang_code}"
+        # 2. 保持雙引號結構
         ssml = (
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts">'
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
             f'<voice name="{voice}">'
             f'<mstts:express-as style="{style}">'
             f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">'
@@ -146,14 +151,14 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v3.1 (Python 3.11 適配版)")
+        st.caption("版本：v3.2 (SSML 語言修復版)")
         
         # 環境診斷顯示
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整：自動去靜音功能已就緒</div>', unsafe_allow_html=True)
         else:
             missing = []
-            if not HAS_PYDUB: missing.append("Pydub (請在 Streamlit 設定將 Python 改為 3.11)")
+            if not HAS_PYDUB: missing.append("Pydub (請確認已將 Python 改為 3.11)")
             if not HAS_FFMPEG: missing.append("FFmpeg (檢查 packages.txt)")
             error_msg = "<br>".join(missing)
             st.markdown(f'<div class="status-err">⚠️ 環境缺失：<br>{error_msg}</div>', unsafe_allow_html=True)
