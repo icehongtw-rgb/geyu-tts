@@ -22,30 +22,102 @@ except ImportError:
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
+# Minimalist Monochrome CSS
 st.markdown("""
     <style>
-    .stApp { background-color: #f8fafc; }
-    .status-ok { background-color: #dcfce7; color: #166534; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #bbf7d0;}
-    .status-err { background-color: #fee2e2; color: #991b1b; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #fecaca;}
-    .debug-box { font-family: monospace; font-size: 0.8rem; background: #e2e8f0; padding: 5px; border-radius: 3px; margin-top: 5px; }
-    /* 調整輸入框高度 */
-    .stTextArea textarea { min-height: 400px; }
+    /* Global Background & Font */
+    .stApp { 
+        background-color: #ffffff; 
+        color: #18181b;
+    }
+    
+    /* Buttons - Override Primary to Black */
+    div.stButton > button:first-child {
+        background-color: #18181b;
+        color: white;
+        border-radius: 8px;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+    div.stButton > button:first-child:hover {
+        background-color: #000000;
+        color: white;
+        border: none;
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    div.stButton > button:first-child:focus {
+        border: none;
+        outline: none;
+        box-shadow: none;
+    }
+
+    /* Status Boxes - Monochrome */
+    .status-ok { 
+        background-color: #f4f4f5; 
+        color: #52525b; 
+        padding: 0.75rem; 
+        border-radius: 8px; 
+        margin-bottom: 15px; 
+        border: 1px solid #e4e4e7;
+        font-size: 0.9rem;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+    .status-err { 
+        background-color: #f4f4f5; 
+        color: #52525b; 
+        padding: 0.75rem; 
+        border-radius: 8px; 
+        margin-bottom: 15px; 
+        border: 1px solid #e4e4e7; /* Neutral border for error too in minimalist design, relying on text */
+        font-size: 0.9rem;
+    }
+    
+    /* Text Area */
+    .stTextArea textarea { 
+        min-height: 450px; 
+        border-radius: 12px;
+        border: 1px solid #e4e4e7;
+        background-color: #fafafa;
+        font-family: monospace;
+    }
+    .stTextArea textarea:focus {
+        border-color: #18181b;
+        box-shadow: 0 0 0 1px #18181b;
+    }
+
+    /* Sidebar */
+    [data-testid="stSidebar"] {
+        background-color: #fafafa;
+        border-right: 1px solid #f4f4f5;
+    }
+    
+    /* Headers */
+    h1, h2, h3 {
+        font-family: 'Inter', sans-serif;
+        color: #18181b;
+        font-weight: 700;
+    }
     </style>
 """, unsafe_allow_html=True)
 
-# --- 3. 數據定義 ---
+# --- 3. 數據定義 (已重新排序：女聲在前，男聲在後) ---
 VOICES = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
-        "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
-        "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
         "zh-CN-XiaohanNeural": "🇨🇳 曉涵 (女聲 - 溫暖)",
+        "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
+        "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
     },
     "繁體中文 (台灣)": {
         "zh-TW-HsiaoChenNeural": "🇹🇼 曉臻 (女聲 - 溫柔/標準)",
-        "zh-TW-YunJheNeural": "🇹🇼 雲哲 (男聲 - 沉穩)",
         "zh-TW-HsiaoYuNeural": "🇹🇼 曉雨 (女聲 - 清晰)",
+        "zh-TW-YunJheNeural": "🇹🇼 雲哲 (男聲 - 沉穩)",
     },
     "英文 (美國)": {
         "en-US-AnaNeural": "🇺🇸 Ana (女聲 - 兒童/可愛)",
@@ -54,7 +126,7 @@ VOICES = {
     }
 }
 
-# 風格預設參數庫
+# 風格預設參數庫 (物理模擬法)
 STYLE_PRESETS = {
     "general":      {"rate": 0,   "pitch": 0},
     "affectionate": {"rate": -25, "pitch": -5}, # 哄孩子
@@ -68,13 +140,13 @@ STYLE_PRESETS = {
 
 STYLES = {
     "general": "預設 (General)",
-    "affectionate": "❤️ 親切/哄孩子 (模擬)",
-    "cheerful": "😄 開心 (模擬)",
-    "gentle": "☁️ 溫和 (模擬)",
-    "sad": "😢 悲傷 (模擬)",
-    "angry": "😡 生氣 (模擬)",
-    "whispering": "🤫 耳語 (模擬)",
-    "shouting": "📢 大喊 (模擬)",
+    "affectionate": "❤️ 親切/哄孩子",
+    "cheerful": "😄 開心",
+    "gentle": "☁️ 溫和",
+    "sad": "😢 悲傷",
+    "angry": "😡 生氣",
+    "whispering": "🤫 耳語",
+    "shouting": "📢 大喊",
 }
 
 # --- 4. Session State 初始化 ---
@@ -138,48 +210,58 @@ async def generate_audio_stream(text, voice, rate_val, volume_val, pitch_val, re
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
-        st.title("⚙️ 參數設定")
-        st.caption("版本：v19.0 (精簡版)")
+        st.title("參數設定")
+        st.caption("Version 19.0 / Monochrome")
         
         if HAS_PYDUB and HAS_FFMPEG:
-            st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
+            st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
         else:
-            st.markdown('<div class="status-err">⚠️ 環境缺失 (需 Python 3.11)</div>', unsafe_allow_html=True)
+            st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
 
-        st.subheader("1. 語音")
-        category = st.selectbox("語言", list(VOICES.keys()))
-        selected_voice = st.selectbox("角色", list(VOICES[category].keys()), format_func=lambda x: VOICES[category][x])
+        st.markdown("### 1. 語音")
+        category = st.selectbox("語言區域", list(VOICES.keys()))
+        selected_voice = st.selectbox("角色選擇", list(VOICES[category].keys()), format_func=lambda x: VOICES[category][x])
 
-        st.subheader("2. 風格 (自動調整參數)")
+        st.markdown("### 2. 風格 (物理模擬)")
         st.selectbox(
-            "選擇情感預設", 
+            "情感預設", 
             list(STYLES.keys()), 
             format_func=lambda x: STYLES[x], 
             index=0,
             key="style_selection",
             on_change=update_sliders
         )
+        st.caption("透過調整語速與音調模擬情感，適用所有角色。")
 
-        st.subheader("3. 微調 (可手動修改)")
+        st.markdown("### 3. 微調")
         rate = st.slider("語速 (Rate)", -100, 100, key="rate_val", format="%d%%")
         pitch = st.slider("音調 (Pitch)", -100, 100, key="pitch_val", format="%dHz")
         volume = st.slider("音量 (Volume)", -100, 100, 0, format="%d%%")
 
-        remove_silence_opt = st.checkbox("✨ 自動去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
+        st.markdown("---")
+        remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
 
-    st.title("🧩 格育 - 兒童語音工具")
+    st.title("兒童語音合成工具")
+    st.markdown("專為教材製作設計的批量生成引擎。")
     
-    # 這裡移除了 col1, col2 分欄，直接使用全寬度
-    text_input = st.text_area("輸入內容 (編號 內容)", height=400, placeholder="001 蘋果\n002 香蕉")
+    text_input = st.text_area("輸入內容 (編號 內容)", height=450, placeholder="001 蘋果\n002 香蕉\n\n(若未輸入編號，系統將自動產生)")
     
     items = []
-    for line in text_input.split('\n'):
+    lines = text_input.split('\n')
+    for i, line in enumerate(lines):
         if line.strip():
+            # Robust parsing:
             parts = line.strip().split(maxsplit=1)
-            if len(parts) == 2:
+            if len(parts) >= 2:
                 items.append((parts[0], parts[1]))
+            elif len(parts) == 1:
+                auto_id = f"auto_{i+1:03d}"
+                items.append((auto_id, parts[0]))
     
-    if st.button(f"🚀 批量生成 ({len(items)} 個檔案)", type="primary", disabled=len(items)==0):
+    # 使用空白將按鈕推到底部或增加間距
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    if st.button(f"開始批量生成 ({len(items)} 檔案)", type="primary", disabled=len(items)==0):
         zip_buffer = io.BytesIO()
         prog = st.progress(0)
         
@@ -191,8 +273,8 @@ def main():
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
-        st.success("完成！")
-        st.download_button("📥 下載 ZIP", zip_buffer.getvalue(), "audio.zip", "application/zip")
+        st.success("生成完成！")
+        st.download_button("下載 ZIP 壓縮檔", zip_buffer.getvalue(), "audio.zip", "application/zip")
 
 if __name__ == "__main__":
     main()
