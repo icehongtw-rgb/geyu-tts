@@ -22,44 +22,113 @@ except ImportError:
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
-# Minimalist Monochrome CSS with Aggressive Streamlit Overrides
+# Minimalist Monochrome CSS with Deep Overrides
 st.markdown("""
     <style>
-    /* Global Background & Font */
+    /* --- GLOBAL RESET --- */
     .stApp { 
         background-color: #ffffff; 
-        color: #18181b;
-        font-family: 'Inter', sans-serif;
+        color: #18181b; /* Zinc-900 */
+        font-family: 'Inter', system-ui, sans-serif;
     }
     
-    /* --- BUTTONS (復刻 App.tsx 的設計) --- */
-    /* Target both regular buttons and download buttons */
+    /* --- 1. REMOVE RED FROM DROPDOWNS (Selectbox) --- */
+    /* Normal state */
+    div[data-baseweb="select"] > div {
+        background-color: #ffffff !important;
+        border-color: #e4e4e7 !important; /* Zinc-200 */
+        color: #18181b !important;
+    }
+    /* Hover state */
+    div[data-baseweb="select"] > div:hover {
+        border-color: #a1a1aa !important; /* Zinc-400 */
+    }
+    /* Focus/Active state (The "Red Flash" Fix) */
+    div[data-baseweb="select"] > div:focus-within,
+    div[data-baseweb="select"] > div:active {
+        border-color: #18181b !important; /* Black */
+        box-shadow: 0 0 0 1px #18181b !important;
+    }
+    /* Dropdown menu items selection color */
+    li[aria-selected="true"] {
+        background-color: #f4f4f5 !important; /* Zinc-100 */
+        color: #18181b !important;
+    }
+
+    /* --- 2. REMOVE RED FROM TEXTAREAS & INPUTS --- */
+    .stTextArea textarea { 
+        min-height: 500px !important;
+        border-radius: 0.75rem !important;
+        border: 1px solid #e4e4e7 !important;
+        background-color: #ffffff !important;
+        font-family: monospace !important;
+        caret-color: #18181b !important; /* Cursor color */
+        padding: 1.5rem !important;
+        line-height: 2rem !important;
+        font-size: 0.875rem !important;
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+    /* Focus state */
+    .stTextArea textarea:focus {
+        border-color: #18181b !important;
+        box-shadow: 0 0 0 1px #18181b !important;
+    }
+
+    /* --- 3. REMOVE RED FROM SLIDERS --- */
+    /* The Thumb (Handle) */
+    div[data-baseweb="slider"] div[role="slider"] {
+        background-color: #18181b !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.2) !important;
+    }
+    /* The Filled Track (Progress) */
+    /* Streamlit uses inline styles for the fill color, usually the primary color. 
+       We use a wildcard style matcher or specific hierarchy to override. */
+    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 75, 75)"] {
+        background-color: #18181b !important;
+    }
+    div[data-baseweb="slider"] div[style*="background-color: rgb(255, 74, 75)"] { /* sometimes slight variation */
+        background-color: #18181b !important;
+    }
+    /* Fallback for newer Streamlit versions: Target the first child div of the track container that has a color */
+    div[data-baseweb="slider"] > div > div > div > div {
+        background-color: #18181b !important;
+    }
+
+    /* --- 4. REMOVE RED FROM CHECKBOXES --- */
+    /* Checked State Background */
+    div[data-baseweb="checkbox"] span[class*="Checked"] {
+        background-color: #18181b !important;
+        border-color: #18181b !important;
+    }
+    /* Checkmark Icon */
+    div[data-baseweb="checkbox"] span[class*="Checked"] div {
+        color: #ffffff !important;
+    }
+    /* Focus Ring */
+    div[data-baseweb="checkbox"]:focus-within span {
+        box-shadow: 0 0 0 2px rgba(24, 24, 27, 0.2) !important;
+    }
+
+    /* --- 5. BUTTON STYLES (MATCHING APP.TSX) --- */
     div.stButton > button, div.stDownloadButton > button {
-        width: 100%; /* 全寬 */
-        background-color: #18181b !important; /* Zinc-900 */
+        width: 100%;
+        background-color: #18181b !important;
         color: white !important;
-        border-radius: 0.75rem !important; /* rounded-xl */
+        border-radius: 0.75rem !important;
         border: none !important;
-        padding-top: 1rem !important;
-        padding-bottom: 1rem !important;
-        font-weight: 700 !important; /* font-bold */
-        letter-spacing: 0.1em !important; /* tracking-widest */
+        padding: 1rem !important;
+        font-weight: 700 !important;
+        letter-spacing: 0.1em !important;
         text-transform: uppercase !important;
-        font-size: 0.875rem !important; /* text-sm */
+        font-size: 0.875rem !important;
         transition: all 0.2s !important;
-        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1) !important;
     }
-    
     div.stButton > button:hover, div.stDownloadButton > button:hover {
         background-color: #000000 !important;
         transform: translateY(-2px);
         box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
     }
-
-    div.stButton > button:active, div.stDownloadButton > button:active {
-        transform: translateY(0);
-    }
-    
     div.stButton > button:disabled {
         background-color: #f4f4f5 !important;
         color: #a1a1aa !important;
@@ -68,78 +137,25 @@ st.markdown("""
         transform: none !important;
     }
 
-    /* --- INPUTS & TEXTAREA (復刻舒適間距) --- */
-    .stTextArea textarea { 
-        min-height: 500px !important;
-        border-radius: 0.75rem !important; /* rounded-xl */
-        border: 1px solid #e4e4e7 !important; /* zinc-200 */
-        background-color: #ffffff !important;
-        font-family: monospace !important;
-        caret-color: #18181b; 
-        
-        /* 關鍵：增加內距與行高，提升閱讀感 */
-        padding: 1.5rem !important; /* p-6 */
-        line-height: 2rem !important; /* leading-8 */
-        font-size: 0.875rem !important; /* text-sm */
-        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    /* --- 6. ALERTS & PROGRESS BARS --- */
+    .stProgress > div > div > div > div {
+        background-color: #18181b !important;
     }
-    
-    .stTextArea textarea:focus {
-        border-color: #18181b !important;
-        box-shadow: 0 0 0 1px #18181b !important;
-    }
-
-    /* --- ALERTS & STATUS (去除綠色/藍色) --- */
-    
-    /* Success Message (原本是綠色) -> 改為極簡灰 */
     div[data-baseweb="notification"], div[data-testid="stAlert"] {
-        background-color: #f4f4f5 !important; /* zinc-100 */
+        background-color: #f4f4f5 !important;
         border: 1px solid #e4e4e7 !important;
         color: #18181b !important;
-        border-radius: 0.5rem !important;
     }
-    
-    /* Icon color in alerts */
     div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
         fill: #18181b !important;
         color: #18181b !important;
     }
-    
-    /* Progress Bar (原本是藍色) -> 改為黑色 */
-    .stProgress > div > div > div > div {
-        background-color: #18181b !important;
-    }
 
-    /* --- SIDEBAR COMPONENTS --- */
-    
-    /* Sliders */
-    div[data-baseweb="slider"] div[class*="Thumb"] {
-        background-color: #18181b !important;
-        border-color: #18181b !important;
-    }
-    div[data-baseweb="slider"] span[class*="fill"] {
-        background-color: #18181b !important;
-    }
-    
-    /* Checkboxes */
-    div[data-baseweb="checkbox"] span[class*="Checked"] {
-        background-color: #18181b !important;
-        border-color: #18181b !important;
-    }
-    
-    /* Selectbox Focus */
-    div[data-baseweb="select"] div:focus-within {
-        border-color: #18181b !important;
-        box-shadow: 0 0 0 1px #18181b !important;
-    }
-    
-    /* Sidebar Background */
+    /* --- SIDEBAR --- */
     [data-testid="stSidebar"] {
         background-color: #fafafa;
         border-right: 1px solid #f4f4f5;
     }
-    
-    /* Status Badges */
     .status-ok { 
         background-color: #f4f4f5; 
         color: #52525b; 
@@ -148,9 +164,7 @@ st.markdown("""
         margin-bottom: 15px; 
         border: 1px solid #e4e4e7;
         font-size: 0.9rem;
-        display: flex;
-        align-items: center;
-        gap: 8px;
+        display: flex; align-items: center; gap: 8px;
     }
     .status-err { 
         background-color: #f4f4f5; 
