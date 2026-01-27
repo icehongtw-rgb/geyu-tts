@@ -6,22 +6,34 @@ import io
 import re
 import sys
 import subprocess
+import shutil
 from xml.sax.saxutils import escape
 
-# --- Pydub 自動安裝與檢測邏輯 ---
-# 針對 Streamlit Cloud 有時忽略 requirements.txt 的情況，加入執行時強制安裝
+# --- Pydub 與 FFmpeg 檢測邏輯 (終極版) ---
+PYDUB_STATUS = "Checking..."
+HAS_FFMPEG = False
+
+# 1. 檢查 FFmpeg (系統層級)
+if shutil.which("ffmpeg"):
+    HAS_FFMPEG = True
+else:
+    HAS_FFMPEG = False
+
+# 2. 檢查與安裝 Pydub (Python 層級)
 try:
     from pydub import AudioSegment
     HAS_PYDUB = True
+    PYDUB_STATUS = "Installed"
 except ImportError:
+    # 嘗試自動修復
     try:
-        # 嘗試在執行時安裝
         subprocess.check_call([sys.executable, "-m", "pip", "install", "pydub"])
         from pydub import AudioSegment
         HAS_PYDUB = True
+        PYDUB_STATUS = "Installed (Auto-fixed)"
     except Exception as e:
         HAS_PYDUB = False
-        PYDUB_ERROR = str(e)
+        PYDUB_STATUS = f"Import Failed: {str(e)}"
 
 # 設定頁面配置
 st.set_page_config(
@@ -41,6 +53,9 @@ st.markdown("""
     .stSelectbox div[data-baseweb="select"] > div:first-child {
         cursor: pointer;
     }
+    .status-box { padding: 0.5rem; border-radius: 0.25rem; margin-bottom: 1rem; font-size: 0.8rem; }
+    .status-ok { background-color: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+    .status-err { background-color: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -124,8 +139,11 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
     使用 pydub 去除頭尾靜音
     """
     if not HAS_PYDUB:
-        return audio_bytes, "未安裝 pydub (維持原檔)"
+        return audio_bytes, f"去靜音失敗: Python庫 pydub 未載入 ({PYDUB_STATUS})"
     
+    if not HAS_FFMPEG:
+        return audio_bytes, "去靜音失敗: 系統缺少 FFmpeg (請檢查 packages.txt)"
+
     try:
         # 載入音訊
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
@@ -152,19 +170,14 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
         return out_io.getvalue(), None
 
     except Exception as e:
-        err_str = str(e)
-        # 針對常見的 FFmpeg 錯誤提供更友善的提示
-        if "No such file or directory" in err_str or "ffmpeg" in err_str.lower():
-            return audio_bytes, "未檢測到 FFmpeg (請確認 packages.txt)"
-        return audio_bytes, f"去靜音失敗: {err_str}"
+        return audio_bytes, f"處理異常: {str(e)}"
 
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v2.1 fix:
-    1. 必須包含 xml:lang (否則 SSML 無效)
-    2. 使用標準雙引號
-    3. 單行無空白拼接
+    v2.2 fix: 
+    - 徹底移除 xml:lang，因為它最容易導致 'speak version' 朗讀錯誤。
+    - 使用單引號，確保格式最乾淨。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -174,34 +187,25 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     # 策略 2: 高級模式 (Advanced Mode) - 適用於特殊情感
     else:
         escaped_text = escape(text)
-        
-        # 提取語言代碼 (例如 zh-CN-Xiaoxiao -> zh-CN)
-        # 這是 SSML 必須的，否則微軟會把它當純文字讀出來
-        lang_code = voice[:5] 
-        
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
         if is_default_prosody:
             content_part = escaped_text
         else:
-            # 屬性值使用雙引號
-            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
+            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
 
-        # v2.1 終極格式：
-        # - 雙引號
-        # - 包含 xml:lang
-        # - 緊湊排列
-        final_ssml = (
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-            f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
-            f'<voice name="{voice}">'
-            f'<mstts:express-as style="{style}">'
-            f'{content_part}'
-            f'</mstts:express-as>'
-            f'</voice>'
-            f'</speak>'
-        )
+        # v2.2 終極格式：單引號、無 xml:lang、無換行
+        ssml_parts = [
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
+            f"<voice name='{voice}'>",
+            f"<mstts:express-as style='{style}'>",
+            content_part,
+            "</mstts:express-as>",
+            "</voice>",
+            "</speak>"
+        ]
         
+        final_ssml = "".join(ssml_parts)
         communicate = edge_tts.Communicate(final_ssml, voice)
 
     # --- 獲取原始音訊 ---
@@ -212,15 +216,17 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     
     raw_bytes = audio_data.getvalue()
     
-    debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
+    # Debug Info
     if style == "general":
-        debug_info = f"[Standard API] Voice: {voice}"
+        debug_info = f"[Mode: Standard] Voice: {voice}"
+    else:
+        debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
 
     # --- 後製去除靜音 ---
     if remove_silence:
         processed_bytes, error_msg = trim_silence(raw_bytes)
         if error_msg:
-            # 返回原始檔案，但在 debug info 中加入警告
+            # 回傳原始檔，並附帶錯誤
             return processed_bytes, f"{debug_info}\n[Warning] {error_msg}"
         return processed_bytes, debug_info
             
@@ -244,13 +250,25 @@ def parse_input(text):
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v2.1 (Pydub 強制安裝版)")
+        st.caption("版本：v2.2 (除錯增強版)")
         
-        # 顯示依賴庫狀態
+        # --- 依賴環境檢測面板 ---
+        st.markdown("---")
+        st.markdown("**環境檢測 (Diagnostics)**")
+        
+        # Pydub Status
         if HAS_PYDUB:
-            st.caption("✅ Pydub: 已就緒")
+            st.markdown(f'<div class="status-box status-ok">✅ Pydub: {PYDUB_STATUS}</div>', unsafe_allow_html=True)
         else:
-            st.error("⚠️ Pydub: 安裝失敗")
+            st.markdown(f'<div class="status-box status-err">❌ Pydub: {PYDUB_STATUS}</div>', unsafe_allow_html=True)
+            
+        # FFmpeg Status
+        if HAS_FFMPEG:
+             st.markdown('<div class="status-box status-ok">✅ FFmpeg: Detected</div>', unsafe_allow_html=True)
+        else:
+             st.markdown('<div class="status-box status-err">❌ FFmpeg: Not Found</div>', unsafe_allow_html=True)
+        
+        st.markdown("---")
 
         st.subheader("1. 選擇聲音")
         category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
@@ -280,7 +298,7 @@ def main():
         
         st.markdown("---")
         
-        remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg。")
+        remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg + Pydub")
         show_debug = st.checkbox("顯示 SSML (除錯用)", value=False)
 
     st.title("🧩 格育 - 兒童語音合成工具 (Edge-TTS)")
@@ -320,7 +338,8 @@ def main():
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
                         
-                        if show_debug:
+                        # Debug Display: Show if checked OR if there is a warning
+                        if show_debug or "[Warning]" in str(debug_info):
                              st.text_area("Debug Info (SSML)", debug_info, height=150)
                             
                         if "[Warning]" in str(debug_info):
@@ -352,9 +371,10 @@ def main():
                          with log_container:
                             warn_text = str(err_msg).split('Warning] ')[-1]
                             st.warning(f"⚠️ {item['filename']}: {warn_text}")
+                            # Force show SSML if debug is checked
                             if show_debug:
-                                with st.expander(f"🔍 查看 {item['filename']} SSML"):
-                                    st.code(err_msg.split('\n')[0], language='xml')
+                                with st.expander(f"🔍 SSML for {item['filename']}"):
+                                    st.code(str(err_msg).split('\n')[0], language='xml')
 
                     file_name_in_zip = f"{item['filename']}.mp3"
                     zip_file.writestr(file_name_in_zip, audio_bytes)
