@@ -107,7 +107,7 @@ export default function StreamlitMock() {
                 ⚙️ 參數設定
             </h2>
             {/* Added Version Label */}
-            <p className="text-xs text-slate-500 -mt-2">版本：v1.2 (預設小曉/SSML修復)</p>
+            <p className="text-xs text-slate-500 -mt-2">版本：v1.4 (SSML 嚴格模式)</p>
             
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-600">1. 選擇聲音</h3>

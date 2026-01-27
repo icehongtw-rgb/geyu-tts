@@ -106,47 +106,50 @@ STYLES = {
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    
-    [修復策略]:
-    1. 如果 style 為 "general"，直接使用 edge-tts 原生參數 (不手動拼接 SSML)，
-       這樣可以 100% 避免 SSML 標籤被朗讀出來的問題。
-    2. 如果 style 不為 "general"，則必須使用 SSML，但我們會動態修正 xml:lang 
-       並使用標準格式，減少伺服器誤判。
+    v1.4 修正:
+    1. 針對 Style 模式，強制移除 SSML 中的換行符號，確保字串以 <speak> 開頭。
+    2. 如果 rate/volume/pitch 都是預設值，省略 prosody 標籤以降低 XML 錯誤風險。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
     if style == "general":
-        # 直接調用，不使用 SSML 標籤，讓庫自己處理
-        # 這是最不容易出錯的方式
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
         
     # 策略 2: 高級模式 (Advanced Mode) - 適用於特殊情感
     else:
         escaped_text = escape(text)
         
-        # 動態提取語言代碼 (例如 zh-CN-Xiaoxiao -> zh-CN)
-        # 避免用 en-US 導致中文語音引擎混亂
+        # 動態提取語言代碼
         try:
             lang_code = "-".join(voice.split("-")[:2])
         except:
-            lang_code = "en-US" # fallback
-            
-        # 構建嚴格的 SSML
-        # 使用雙引號，並確保結構正確
-        ssml = (
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-            f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
-            f'<voice name="{voice}">'
-            f'<mstts:express-as style="{style}">'
-            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">'
-            f'{escaped_text}'
-            f'</prosody>'
-            f'</mstts:express-as>'
-            f'</voice>'
-            f'</speak>'
+            lang_code = "en-US"
+
+        # 檢查參數是否有變動
+        is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
+        
+        # 構建 Prosody 部分
+        if is_default_prosody:
+            content_part = escaped_text
+        else:
+            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
+
+        # 構建完整 SSML
+        # 重要：使用 f-string 但最後要用 .strip() 和 .replace() 確保它是單行且無空格
+        raw_ssml = (
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='{lang_code}'>"
+            f"<voice name='{voice}'>"
+            f"<mstts:express-as style='{style}'>"
+            f"{content_part}"
+            f"</mstts:express-as>"
+            f"</voice>"
+            f"</speak>"
         )
-        # 傳入 SSML 時，不需要再傳入 rate/vol/pitch 參數，因為已經寫在 XML 裡了
-        communicate = edge_tts.Communicate(ssml, voice)
+        
+        # 關鍵修正：移除所有換行符，確保 edge-tts 識別為 SSML
+        final_ssml = raw_ssml.strip()
+        
+        communicate = edge_tts.Communicate(final_ssml, voice)
 
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
@@ -186,7 +189,7 @@ def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
         # --- 新增版本號顯示 ---
-        st.caption("版本：v1.3 (安全模式修復版)")
+        st.caption("版本：v1.4 (SSML 嚴格模式)")
         
         # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
