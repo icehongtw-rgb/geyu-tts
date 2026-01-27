@@ -6,6 +6,12 @@ import io
 import re
 import shutil
 import sys
+# 嘗試獲取版本號
+try:
+    import importlib.metadata
+    EDGE_TTS_VERSION = importlib.metadata.version("edge-tts")
+except:
+    EDGE_TTS_VERSION = "Unknown"
 from xml.sax.saxutils import escape
 
 # --- 1. 環境檢測 ---
@@ -90,29 +96,26 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v12.0: ChatGPT 官方參數修正版) ---
+# --- 5. 核心生成邏輯 (v14.0: 雙重強制覆蓋版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
-    # 防呆：如果選了台灣語音但又選了風格，強制切回一般模式
+    # 防呆
     if style != "general" and voice not in VOICES_WITH_STYLE:
         style = "general"
 
-    # 策略 1: 一般模式 (純文本)
+    # 一般模式
     if style == "general":
-        # 這裡不加 ssml=True，完全交給庫去處理純文字
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 策略 2: 風格模式 (明確 SSML)
+    # 風格模式 (強制 SSML)
     else:
         escaped_text = escape(text)
-        
-        # 判斷是否需要 Prosody
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建標準 SSML (使用 ChatGPT 建議的結構)
+        # 1. 構建標準 SSML
         ssml_parts = [
-            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="zh-CN">',
+            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">',
             f'<voice name="{voice}">',
             f'<mstts:express-as style="{style}">',
         ]
@@ -133,10 +136,17 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
         
-        # 【關鍵修復點】
-        # 使用 ssml=True 參數 (這不是私有屬性，而是建構函數參數)
-        # 注意：當 ssml=True 時，rate/volume/pitch 參數會被忽略，必須寫在 XML 裡 (上面已經寫了)
-        communicate = edge_tts.Communicate(clean_ssml, voice, ssml=True)
+        # 2. 初始化 (可能被庫錯誤轉義)
+        communicate = edge_tts.Communicate(clean_ssml, voice)
+        
+        # 3. 【v14.0 核心修復：雙重覆蓋】
+        # 強制告訴庫：這是 SSML
+        if hasattr(communicate, "_ssml"):
+            communicate._ssml = True
+            
+        # 強制把內容換回我們乾淨的 SSML (防止庫之前自作聰明轉義了它)
+        if hasattr(communicate, "_text"):
+            communicate._text = clean_ssml
 
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
@@ -153,7 +163,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v12.0 (ChatGPT 修正版)")
+        st.caption(f"App v14.0 | edge-tts v{EDGE_TTS_VERSION}")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
