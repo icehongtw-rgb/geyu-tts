@@ -114,7 +114,7 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
     使用 pydub 去除頭尾靜音
     """
     if not HAS_PYDUB:
-        return audio_bytes, "未安裝 pydub"
+        return audio_bytes, "未安裝 pydub (請重啟 App)"
     
     try:
         # 載入音訊
@@ -148,32 +148,46 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.7 fix: 單引號 + 極簡 Header
-    v1.8 fix: 支援去除靜音
+    v1.9 fix: 強制單行 (One-Liner) + 雙引號 + xml:lang 確保格式絕對正確
     """
     
-    # --- SSML 生成邏輯 (保持 v1.7 的修復) ---
+    # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
+        
+    # 策略 2: 高級模式 (Advanced Mode) - 適用於特殊情感
     else:
         escaped_text = escape(text)
+        
+        # 動態提取語言代碼 (例如 zh-CN)
+        try:
+            lang_code = "-".join(voice.split("-")[:2])
+        except:
+            lang_code = "en-US"
+
+        # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
+        # 構建 Prosody 部分 (雙引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
-            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
+            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
 
-        ssml_parts = [
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
-            f"<voice name='{voice}'>",
-            f"<mstts:express-as style='{style}'>",
-            content_part,
-            "</mstts:express-as>",
-            "</voice>",
-            "</speak>"
-        ]
-        final_ssml = "".join(ssml_parts).strip()
+        # v1.9 終極修正：將所有內容壓縮成一行，不使用換行符號
+        # 並使用標準雙引號，這最符合 XML 規範，也能避免 Edge-TTS 誤判
+        # 補回 xml:lang，但在某些環境下是必須的
+        final_ssml = (
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+            f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
+            f'<voice name="{voice}">'
+            f'<mstts:express-as style="{style}">'
+            f'{content_part}'
+            f'</mstts:express-as>'
+            f'</voice>'
+            f'</speak>'
+        )
+        
         communicate = edge_tts.Communicate(final_ssml, voice)
 
     # --- 獲取原始音訊 ---
@@ -185,7 +199,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     raw_bytes = audio_data.getvalue()
     debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
 
-    # --- v1.8: 後製去除靜音 ---
+    # --- 後製去除靜音 ---
     if remove_silence:
         processed_bytes, error_msg = trim_silence(raw_bytes)
         if error_msg:
@@ -212,8 +226,14 @@ def parse_input(text):
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v1.8 (新增靜音去除)")
+        st.caption("版本：v1.9 (SSML 單行修正版)")
         
+        # 顯示依賴庫狀態
+        if HAS_PYDUB:
+            st.caption("✅ Pydub: 已安裝")
+        else:
+            st.warning("⚠️ Pydub: 未安裝 (請 Reboot App)")
+
         st.subheader("1. 選擇聲音")
         category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
         voice_options = VOICES[category]
@@ -242,7 +262,6 @@ def main():
         
         st.markdown("---")
         
-        # v1.8 新功能
         remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg。可去除音檔前後多餘的空白。")
         show_debug = st.checkbox("顯示 SSML (除錯用)", value=False)
 
@@ -283,10 +302,12 @@ def main():
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
                         
+                        # v1.9 Logic Fix: Always show debug if checked, even if there's a warning
+                        if show_debug:
+                            st.text_area("Debug Info (SSML)", debug_info, height=150)
+                            
                         if "[Warning]" in str(debug_info):
                             st.warning(str(debug_info).split('\n')[-1])
-                        elif show_debug:
-                            st.text_area("Debug Info", debug_info, height=150)
                             
                     except Exception as e:
                         st.error(f"錯誤: {str(e)}")
