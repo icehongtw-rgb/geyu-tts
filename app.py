@@ -92,7 +92,7 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v10.0: 崩潰修復 + 標準 XML) ---
+# --- 5. 核心生成邏輯 (v10.1: 修復語法錯誤) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
@@ -104,10 +104,10 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     else:
         escaped_text = escape(text)
         
-        # 判斷是否需要 Prosody (減少 XML 複雜度)
+        # 判斷是否需要 Prosody
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # v10.0 修正：使用 zh-CN 作為標準語言標頭，並使用雙引號
+        # v10.1: 使用 zh-CN 並確保雙引號
         ssml_parts = [
             '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">',
             f'<voice name="{voice}">',
@@ -125,7 +125,6 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         ssml_parts.append('</voice>')
         ssml_parts.append('</speak>')
         
-        # 合並為單行，無隱形字符
         clean_ssml = "".join(ssml_parts)
         
         debug_info["is_ssml"] = True
@@ -148,7 +147,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v10.0 (穩定修復版)")
+        st.caption("版本：v10.1 (語法修復版)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -208,4 +207,23 @@ def main():
         
         debug_container = st.expander("🔍 批量生成 SSML 檢查", expanded=show_debug)
         
-        with zipfile.ZipFile(zip_buffer, "w")
+        # v10.1 修復：加上了 with 語句結尾的冒號 :
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            for i, (fname, txt) in enumerate(items):
+                try:
+                    data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
+                    zf.writestr(f"{fname}.mp3", data)
+                    
+                    if show_debug and dbg.get("is_ssml") and i == 0:
+                        with debug_container:
+                            st.write(f"📝 範例檔案: {fname}")
+                            st.code(dbg["raw_ssml"], language="xml")
+                            
+                except Exception as e:
+                    st.error(f"{fname} 失敗: {e}")
+                prog.progress((i+1)/len(items))
+        st.success("完成！")
+        st.download_button("📥 下載 ZIP", zip_buffer.getvalue(), "audio.zip", "application/zip")
+
+if __name__ == "__main__":
+    main()
