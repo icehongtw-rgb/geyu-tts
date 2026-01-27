@@ -6,6 +6,7 @@ import io
 import re
 import shutil
 import binascii
+import pkg_resources
 from xml.sax.saxutils import escape
 
 # --- 1. 環境檢測 ---
@@ -21,6 +22,12 @@ try:
 except ImportError:
     HAS_PYDUB = False
 
+# 獲取 edge-tts 版本
+try:
+    EDGE_TTS_VERSION = pkg_resources.get_distribution("edge-tts").version
+except:
+    EDGE_TTS_VERSION = "Unknown"
+
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
@@ -29,7 +36,7 @@ st.markdown("""
     .stApp { background-color: #f8fafc; }
     .status-ok { background-color: #dcfce7; color: #166534; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #bbf7d0;}
     .status-err { background-color: #fee2e2; color: #991b1b; padding: 0.5rem; border-radius: 5px; margin-bottom: 10px; border: 1px solid #fecaca;}
-    .hex-debug { font-family: monospace; font-size: 0.8rem; color: #64748b; background: #e2e8f0; padding: 2px 4px; border-radius: 3px; }
+    .debug-box { font-family: monospace; font-size: 0.8rem; background: #e2e8f0; padding: 5px; border-radius: 3px; margin-top: 5px; }
     </style>
 """, unsafe_allow_html=True)
 
@@ -90,46 +97,41 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v8.0: 雙引號修復 + 崩潰修復) ---
+# --- 5. 核心生成邏輯 (v9.0: en-US 標頭 + 結構簡化) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
-    debug_info = {"is_ssml": False, "ssml_start_hex": "", "raw_ssml": ""}
+    debug_info = {"is_ssml": False, "raw_ssml": ""}
     
-    # 策略 1: 一般模式
+    # 一般模式 (不使用 SSML)
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 策略 2: 風格模式 (嚴格的 SSML 雙引號格式)
+    # 風格模式 (SSML)
     else:
         escaped_text = escape(text)
         
-        # 提取正確的語言代碼 (Azure 要求 zh-CN 或 zh-TW 等)
-        try:
-            lang_code = "-".join(voice.split("-")[:2])
-        except:
-            lang_code = "zh-CN"
-
-        # 【v8.0 關鍵修復】
-        # 1. 外部用單引號 '，內部屬性全部用雙引號 " (微軟強制要求)
-        # 2. 結構緊湊，無換行
-        ssml_parts = [
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">',
-            f'<voice name="{voice}">',
-            f'<mstts:express-as style="{style}">',
-            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">',
-            f'{escaped_text}',
-            f'</prosody>',
-            f'</mstts:express-as>',
-            f'</voice>',
-            f'</speak>'
-        ]
+        # 判斷是否需要 Prosody 標籤 (如果都是預設值，就省略，減少出錯機率)
+        has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 移除前後空白與 BOM，合併為一行
-        clean_ssml = "".join(ssml_parts).replace('\ufeff', '').strip()
+        # 【v9.0 關鍵策略】
+        # 1. xml:lang="en-US"：強制使用寬鬆解析模式 (這是解決"唸代碼"的殺手鐧)
+        # 2. 屬性間保留標準空格
+        # 3. 如果不需要調整語速，就不加 <prosody>
+        
+        header = '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="en-US">'
+        voice_tag = f'<voice name="{voice}">'
+        style_tag = f'<mstts:express-as style="{style}">'
+        
+        content = escaped_text
+        if has_prosody:
+            content = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{content}</prosody>'
+            
+        footer = '</mstts:express-as></voice></speak>'
+        
+        # 組合並移除多餘空白
+        clean_ssml = f"{header}{voice_tag}{style_tag}{content}{footer}"
         
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
-        # 記錄前 20 個字符的 Hex 代碼
-        debug_info["ssml_start_hex"] = binascii.hexlify(clean_ssml[:20].encode('utf-8')).decode('utf-8')
         
         communicate = edge_tts.Communicate(clean_ssml, voice)
 
@@ -148,7 +150,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v8.0 (雙引號穩定版)")
+        st.caption(f"App v9.0 | Lib v{EDGE_TTS_VERSION}")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -174,7 +176,7 @@ def main():
             st.selectbox("情感", ["預設 (General)"], disabled=True)
 
         remove_silence_opt = st.checkbox("✨ 自動去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        show_debug = st.checkbox("🔍 開啟診斷", value=True)
+        show_debug = st.checkbox("🔍 開啟 SSML 檢視", value=True)
 
     st.title("🧩 格育 - 兒童語音工具")
     
@@ -191,9 +193,6 @@ def main():
                     data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     st.audio(data, format='audio/mp3')
                     if show_debug and dbg.get("is_ssml"):
-                         st.markdown(f"SSML Hex: `<span class='hex-debug'>{dbg['ssml_start_hex']}</span>`", unsafe_allow_html=True)
-                         if not dbg['ssml_start_hex'].startswith("3c737065616b"):
-                             st.error("⚠️ 格式異常")
                          st.code(dbg["raw_ssml"], language="xml")
                 except Exception as e:
                     st.error(f"錯誤: {e}")
@@ -206,13 +205,11 @@ def main():
                 items.append((parts[0], parts[1]))
     
     if st.button(f"🚀 批量生成 ({len(items)} 個檔案)", type="primary", disabled=len(items)==0):
-        # 修正：這裡正確初始化變量名
         zip_buffer = io.BytesIO()
         prog = st.progress(0)
         
-        debug_container = st.expander("🔍 批量生成診斷報告", expanded=show_debug)
+        debug_container = st.expander("🔍 批量生成 SSML 檢查", expanded=show_debug)
         
-        # 修正：這裡使用正確的變量名 zip_buffer
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
@@ -221,7 +218,7 @@ def main():
                     
                     if show_debug and dbg.get("is_ssml") and i == 0:
                         with debug_container:
-                            st.write(f"📝 檔案: {fname}")
+                            st.write(f"📝 範例檔案: {fname}")
                             st.code(dbg["raw_ssml"], language="xml")
                             
                 except Exception as e:
