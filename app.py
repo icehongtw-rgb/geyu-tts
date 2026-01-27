@@ -92,7 +92,7 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v10.1: 修復語法錯誤) ---
+# --- 5. 核心生成邏輯 (v11.0: 暴力強制 SSML 模式) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
@@ -100,16 +100,15 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 策略 2: 風格模式 (標準 SSML 構建)
+    # 策略 2: 風格模式 (強制開啟 SSML)
     else:
         escaped_text = escape(text)
         
-        # 判斷是否需要 Prosody
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # v10.1: 使用 zh-CN 並確保雙引號
+        # 使用最標準的 SSML 結構
         ssml_parts = [
-            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">',
+            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="zh-CN">',
             f'<voice name="{voice}">',
             f'<mstts:express-as style="{style}">',
         ]
@@ -131,6 +130,10 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         debug_info["raw_ssml"] = clean_ssml
         
         communicate = edge_tts.Communicate(clean_ssml, voice)
+        
+        # 【關鍵修復】: 強制手動設置內部標記，繞過庫的自動檢測
+        # 這會迫使 edge-tts 相信我們傳入的是 SSML，不進行轉義
+        communicate._ssml = True 
 
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
@@ -147,7 +150,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v10.1 (語法修復版)")
+        st.caption("版本：v11.0 (強制 SSML 模式)")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
@@ -207,7 +210,6 @@ def main():
         
         debug_container = st.expander("🔍 批量生成 SSML 檢查", expanded=show_debug)
         
-        # v10.1 修復：加上了 with 語句結尾的冒號 :
         with zipfile.ZipFile(zip_buffer, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
