@@ -114,7 +114,7 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
     使用 pydub 去除頭尾靜音
     """
     if not HAS_PYDUB:
-        return audio_bytes, "未安裝 pydub (請重啟 App)"
+        return audio_bytes, "未安裝 pydub (維持原檔)"
     
     try:
         # 載入音訊
@@ -132,7 +132,7 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
         duration = len(audio)
         # 避免切過頭
         if start_trim + end_trim >= duration:
-            return audio_bytes, "靜音過多，保留原檔"
+            return audio_bytes, "靜音過多 (維持原檔)"
             
         trimmed_audio = audio[start_trim:duration-end_trim]
         
@@ -148,7 +148,7 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.9 fix: 強制單行 (One-Liner) + 雙引號 + xml:lang 確保格式絕對正確
+    v2.0 fix: 嚴格執行「單引號」原則，移除 xml:lang，修復 'Speak version' 問題。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -159,35 +159,31 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     else:
         escaped_text = escape(text)
         
-        # 動態提取語言代碼 (例如 zh-CN)
-        try:
-            lang_code = "-".join(voice.split("-")[:2])
-        except:
-            lang_code = "en-US"
-
         # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建 Prosody 部分 (雙引號)
+        # 構建 Prosody 部分 (嚴格單引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
-            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
+            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
 
-        # v1.9 終極修正：將所有內容壓縮成一行，不使用換行符號
-        # 並使用標準雙引號，這最符合 XML 規範，也能避免 Edge-TTS 誤判
-        # 補回 xml:lang，但在某些環境下是必須的
-        final_ssml = (
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
-            f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
-            f'<voice name="{voice}">'
-            f'<mstts:express-as style="{style}">'
-            f'{content_part}'
-            f'</mstts:express-as>'
-            f'</voice>'
-            f'</speak>'
-        )
+        # v2.0 終極修正：
+        # 1. 移除 xml:lang (這是導致誤讀的元兇)
+        # 2. 屬性全部使用單引號 '
+        # 3. 壓縮為單行，避免換行符號干擾
+        ssml_parts = [
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
+            f"<voice name='{voice}'>",
+            f"<mstts:express-as style='{style}'>",
+            content_part,
+            "</mstts:express-as>",
+            "</voice>",
+            "</speak>"
+        ]
         
+        # 使用空字串連接，並 strip 確保無前後空白
+        final_ssml = "".join(ssml_parts).strip()
         communicate = edge_tts.Communicate(final_ssml, voice)
 
     # --- 獲取原始音訊 ---
@@ -197,12 +193,18 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
             audio_data.write(chunk["data"])
     
     raw_bytes = audio_data.getvalue()
-    debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
+    
+    # 除錯資訊：如果是 General 模式，顯示 "Standard API"
+    if style == "general":
+        debug_info = f"Mode: Standard API (No SSML)\nVoice: {voice}"
+    else:
+        debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
 
     # --- 後製去除靜音 ---
     if remove_silence:
         processed_bytes, error_msg = trim_silence(raw_bytes)
         if error_msg:
+            # 返回原始檔案，但在 debug info 中加入警告
             return processed_bytes, f"{debug_info}\n[Warning] 去除靜音失敗: {error_msg}"
         return processed_bytes, debug_info
             
@@ -226,13 +228,13 @@ def parse_input(text):
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v1.9 (SSML 單行修正版)")
+        st.caption("版本：v2.0 (SSML 單引號修復版)")
         
         # 顯示依賴庫狀態
         if HAS_PYDUB:
             st.caption("✅ Pydub: 已安裝")
         else:
-            st.warning("⚠️ Pydub: 未安裝 (請 Reboot App)")
+            st.warning("⚠️ Pydub: 未安裝 (無法去靜音)")
 
         st.subheader("1. 選擇聲音")
         category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
@@ -302,9 +304,9 @@ def main():
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
                         
-                        # v1.9 Logic Fix: Always show debug if checked, even if there's a warning
+                        # Fix: 無論是否有錯誤，只要勾選 debug 就顯示 SSML
                         if show_debug:
-                            st.text_area("Debug Info (SSML)", debug_info, height=150)
+                             st.text_area("Debug Info (SSML)", debug_info, height=150)
                             
                         if "[Warning]" in str(debug_info):
                             st.warning(str(debug_info).split('\n')[-1])
@@ -333,7 +335,12 @@ def main():
                     
                     if "[Warning]" in str(err_msg):
                          with log_container:
-                            st.warning(f"⚠️ {item['filename']}: {str(err_msg).split('Warning] ')[-1]}")
+                            warn_text = str(err_msg).split('Warning] ')[-1]
+                            st.warning(f"⚠️ {item['filename']}: {warn_text}")
+                            # Fix: 批量模式下，如果有勾選 Debug 且發生警告，顯示該項目的 SSML
+                            if show_debug:
+                                with st.expander(f"🔍 查看 {item['filename']} SSML"):
+                                    st.code(err_msg.split('\n')[0], language='xml')
 
                     file_name_in_zip = f"{item['filename']}.mp3"
                     zip_file.writestr(file_name_in_zip, audio_bytes)
