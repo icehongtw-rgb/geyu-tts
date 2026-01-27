@@ -109,7 +109,7 @@ export default function StreamlitMock() {
                 ⚙️ 參數設定
             </h2>
             {/* Added Version Label */}
-            <p className="text-xs text-slate-500 -mt-2">版本：v2.0 (SSML 單引號修復版)</p>
+            <p className="text-xs text-slate-500 -mt-2">版本：v2.1 (Pydub 強制安裝版)</p>
             
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-600">1. 選擇聲音</h3>

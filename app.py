@@ -4,14 +4,24 @@ import asyncio
 import zipfile
 import io
 import re
+import sys
+import subprocess
 from xml.sax.saxutils import escape
 
-# 嘗試導入 pydub，若失敗則標記不可用
+# --- Pydub 自動安裝與檢測邏輯 ---
+# 針對 Streamlit Cloud 有時忽略 requirements.txt 的情況，加入執行時強制安裝
 try:
     from pydub import AudioSegment
     HAS_PYDUB = True
 except ImportError:
-    HAS_PYDUB = False
+    try:
+        # 嘗試在執行時安裝
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "pydub"])
+        from pydub import AudioSegment
+        HAS_PYDUB = True
+    except Exception as e:
+        HAS_PYDUB = False
+        PYDUB_ERROR = str(e)
 
 # 設定頁面配置
 st.set_page_config(
@@ -142,13 +152,19 @@ def trim_silence(audio_bytes, silence_thresh=-50.0, chunk_size=10):
         return out_io.getvalue(), None
 
     except Exception as e:
-        # 通常是找不到 ffmpeg
-        return audio_bytes, f"處理失敗 (可能未安裝 FFmpeg): {str(e)}"
+        err_str = str(e)
+        # 針對常見的 FFmpeg 錯誤提供更友善的提示
+        if "No such file or directory" in err_str or "ffmpeg" in err_str.lower():
+            return audio_bytes, "未檢測到 FFmpeg (請確認 packages.txt)"
+        return audio_bytes, f"去靜音失敗: {err_str}"
 
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v2.0 fix: 嚴格執行「單引號」原則，移除 xml:lang，修復 'Speak version' 問題。
+    v2.1 fix:
+    1. 必須包含 xml:lang (否則 SSML 無效)
+    2. 使用標準雙引號
+    3. 單行無空白拼接
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -159,31 +175,33 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     else:
         escaped_text = escape(text)
         
-        # 檢查參數是否有變動
+        # 提取語言代碼 (例如 zh-CN-Xiaoxiao -> zh-CN)
+        # 這是 SSML 必須的，否則微軟會把它當純文字讀出來
+        lang_code = voice[:5] 
+        
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建 Prosody 部分 (嚴格單引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
-            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
+            # 屬性值使用雙引號
+            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
 
-        # v2.0 終極修正：
-        # 1. 移除 xml:lang (這是導致誤讀的元兇)
-        # 2. 屬性全部使用單引號 '
-        # 3. 壓縮為單行，避免換行符號干擾
-        ssml_parts = [
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts'>",
-            f"<voice name='{voice}'>",
-            f"<mstts:express-as style='{style}'>",
-            content_part,
-            "</mstts:express-as>",
-            "</voice>",
-            "</speak>"
-        ]
+        # v2.1 終極格式：
+        # - 雙引號
+        # - 包含 xml:lang
+        # - 緊湊排列
+        final_ssml = (
+            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" '
+            f'xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
+            f'<voice name="{voice}">'
+            f'<mstts:express-as style="{style}">'
+            f'{content_part}'
+            f'</mstts:express-as>'
+            f'</voice>'
+            f'</speak>'
+        )
         
-        # 使用空字串連接，並 strip 確保無前後空白
-        final_ssml = "".join(ssml_parts).strip()
         communicate = edge_tts.Communicate(final_ssml, voice)
 
     # --- 獲取原始音訊 ---
@@ -194,18 +212,16 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     
     raw_bytes = audio_data.getvalue()
     
-    # 除錯資訊：如果是 General 模式，顯示 "Standard API"
+    debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
     if style == "general":
-        debug_info = f"Mode: Standard API (No SSML)\nVoice: {voice}"
-    else:
-        debug_info = communicate._text if hasattr(communicate, '_text') else "SSML Hidden"
+        debug_info = f"[Standard API] Voice: {voice}"
 
     # --- 後製去除靜音 ---
     if remove_silence:
         processed_bytes, error_msg = trim_silence(raw_bytes)
         if error_msg:
             # 返回原始檔案，但在 debug info 中加入警告
-            return processed_bytes, f"{debug_info}\n[Warning] 去除靜音失敗: {error_msg}"
+            return processed_bytes, f"{debug_info}\n[Warning] {error_msg}"
         return processed_bytes, debug_info
             
     return raw_bytes, debug_info
@@ -228,13 +244,13 @@ def parse_input(text):
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v2.0 (SSML 單引號修復版)")
+        st.caption("版本：v2.1 (Pydub 強制安裝版)")
         
         # 顯示依賴庫狀態
         if HAS_PYDUB:
-            st.caption("✅ Pydub: 已安裝")
+            st.caption("✅ Pydub: 已就緒")
         else:
-            st.warning("⚠️ Pydub: 未安裝 (無法去靜音)")
+            st.error("⚠️ Pydub: 安裝失敗")
 
         st.subheader("1. 選擇聲音")
         category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
@@ -264,7 +280,7 @@ def main():
         
         st.markdown("---")
         
-        remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg。可去除音檔前後多餘的空白。")
+        remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=False, help="需系統安裝 FFmpeg。")
         show_debug = st.checkbox("顯示 SSML (除錯用)", value=False)
 
     st.title("🧩 格育 - 兒童語音合成工具 (Edge-TTS)")
@@ -304,7 +320,6 @@ def main():
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
                         
-                        # Fix: 無論是否有錯誤，只要勾選 debug 就顯示 SSML
                         if show_debug:
                              st.text_area("Debug Info (SSML)", debug_info, height=150)
                             
@@ -337,7 +352,6 @@ def main():
                          with log_container:
                             warn_text = str(err_msg).split('Warning] ')[-1]
                             st.warning(f"⚠️ {item['filename']}: {warn_text}")
-                            # Fix: 批量模式下，如果有勾選 Debug 且發生警告，顯示該項目的 SSML
                             if show_debug:
                                 with st.expander(f"🔍 查看 {item['filename']} SSML"):
                                     st.code(err_msg.split('\n')[0], language='xml')
