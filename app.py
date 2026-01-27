@@ -101,7 +101,7 @@ def trim_silence(audio_bytes):
     
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v4.0: 安全格式版) ---
+# --- 5. 核心生成邏輯 (v5.0: 絕對純淨版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_ssml = None
     
@@ -114,23 +114,24 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         if "zh-TW" in voice: lang_code = "zh-TW"
         if "en-US" in voice: lang_code = "en-US"
 
-        # 【v4.0 關鍵修復】: 使用三引號區塊，確保絕對沒有隱形換行問題
-        # 並且強制在屬性之間保留空格
-        ssml_content = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">
-<voice name="{voice}">
-<mstts:express-as style="{style}">
-<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">
-{escaped_text}
-</prosody>
-</mstts:express-as>
-</voice>
-</speak>"""
+        # 【v5.0 關鍵修復】: 放棄多行字串，改用列表拼接
+        # 這能 100% 避免隱形字符導致 edge-tts 判斷失效
+        parts = []
+        parts.append(f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">')
+        parts.append(f'<voice name="{voice}">')
+        parts.append(f'<mstts:express-as style="{style}">')
+        parts.append(f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">')
+        parts.append(f'{escaped_text}')
+        parts.append('</prosody>')
+        parts.append('</mstts:express-as>')
+        parts.append('</voice>')
+        parts.append('</speak>')
         
-        # 移除所有換行符，變成緊湊的一行，這是微軟最喜歡的格式
-        # 同時使用 strip() 確保頭尾絕對沒有空白
-        clean_ssml = ssml_content.replace("\n", "").strip()
-        debug_ssml = clean_ssml # 記錄下來供調試
+        # 直接合併，中間不加任何東西
+        clean_ssml = "".join(parts)
+        debug_ssml = clean_ssml 
         
+        # 傳送給 edge-tts (因為字串確實以 <speak 開頭，庫會識別為 SSML)
         communicate = edge_tts.Communicate(clean_ssml, voice)
     else:
         # 一般模式
@@ -152,7 +153,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v4.0 (安全 SSML 版)")
+        st.caption("版本：v5.0 (純淨拼接版)")
         
         # 環境診斷
         if HAS_PYDUB and HAS_FFMPEG:
@@ -182,9 +183,7 @@ def main():
                 st.caption("ℹ️ 台灣語音暫不支援情感")
 
         remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        
-        # 新增調試選項
-        show_debug = st.checkbox("🐞 顯示 SSML 代碼 (若生成錯誤請勾選)", value=False)
+        show_debug = st.checkbox("🐞 顯示 SSML (若發音異常請勾選)", value=False)
 
     st.title("🧩 格育 - 兒童語音工具")
     
@@ -201,7 +200,7 @@ def main():
                     data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     st.audio(data, format='audio/mp3')
                     if show_debug and dbg:
-                        st.text_area("發送給微軟的指令 (SSML)", dbg, height=100)
+                        st.text_area("Debug SSML", dbg)
                 except Exception as e:
                     st.error(f"錯誤: {e}")
 
