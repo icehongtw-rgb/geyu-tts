@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Info } from 'lucide-react';
+import { Info, Bug } from 'lucide-react';
 
 // --- Data ported from app.py for accurate preview ---
 const VOICES: Record<string, string[]> = {
@@ -78,6 +78,7 @@ export default function StreamlitMock() {
   const [pitch, setPitch] = useState(0);
   const [style, setStyle] = useState("預設 (General)");
   const [text, setText] = useState("");
+  const [showDebug, setShowDebug] = useState(false);
   
   // Update voice when category changes
   useEffect(() => {
@@ -107,7 +108,7 @@ export default function StreamlitMock() {
                 ⚙️ 參數設定
             </h2>
             {/* Added Version Label */}
-            <p className="text-xs text-slate-500 -mt-2">版本：v1.5 (SSML 雙引號修復版)</p>
+            <p className="text-xs text-slate-500 -mt-2">版本：v1.6 (命名空間隔離修復)</p>
             
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-600">1. 選擇聲音</h3>
@@ -200,7 +201,18 @@ export default function StreamlitMock() {
             </div>
             
             <hr className="border-slate-100" />
-            <p className="text-xs text-slate-500">檔案格式：預設為 MP3 (Edge-TTS 原生高音質)</p>
+            
+            <div className="flex items-center gap-2">
+                <input 
+                    type="checkbox" 
+                    id="debug" 
+                    checked={showDebug} 
+                    onChange={e => setShowDebug(e.target.checked)}
+                    className="w-4 h-4 accent-[#ff4b4b]"
+                />
+                <label htmlFor="debug" className="text-xs text-slate-700 cursor-pointer select-none">顯示 SSML (除錯用)</label>
+            </div>
+            <p className="text-xs text-slate-500">若遇到 'speak version...' 朗讀問題，請開啟此選項並截圖回報。</p>
         </div>
       </div>
 
@@ -249,6 +261,19 @@ export default function StreamlitMock() {
                 <button className="w-full py-2 bg-white border border-slate-200 hover:border-[#ff4b4b] hover:text-[#ff4b4b] text-slate-700 rounded transition-colors text-sm font-medium shadow-sm">
                     生成試聽
                 </button>
+                
+                {showDebug && style !== "預設 (General)" && (
+                     <div className="space-y-1">
+                        <label className="text-xs text-slate-600 font-semibold flex items-center gap-1">
+                             <Bug className="w-3 h-3"/> Debug SSML
+                        </label>
+                        <textarea 
+                            className="w-full h-24 p-2 border border-slate-200 bg-slate-50 text-xs font-mono rounded-md outline-none resize-none shadow-sm"
+                            readOnly
+                            value={`<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='zh-CN'><voice name='zh-CN-XiaoxiaoNeural'><mstts:express-as xmlns:mstts='https://www.w3.org/2001/mstts' style='cheerful'>...</mstts:express-as></voice></speak>`}
+                        ></textarea>
+                     </div>
+                )}
             </div>
         </div>
 

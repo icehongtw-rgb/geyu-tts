@@ -68,7 +68,6 @@ VOICES = {
 }
 
 # --- 2. 哪些角色支援 Style (白名單) ---
-# 注意：台灣語音 (zh-TW) 目前官方 API 並不支援 style 參數
 VOICES_WITH_STYLE = [
     "zh-CN-XiaoxiaoNeural",
     "zh-CN-YunxiNeural",
@@ -81,7 +80,7 @@ VOICES_WITH_STYLE = [
     "en-US-DavisNeural"
 ]
 
-# --- 3. 完整情感風格清單 (針對 Xiaoxiao 等高級模型) ---
+# --- 3. 完整情感風格清單 ---
 STYLES = {
     "general": "預設 (General)",
     "affectionate": "親切/哄孩子 (Affectionate) - 適合講睡前故事",
@@ -106,9 +105,10 @@ STYLES = {
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
     """
     使用 edge-tts 生成音訊並返回 bytes。
-    v1.5 修正:
-    1. 強制將所有 XML 屬性使用雙引號 " (某些解析器不支援單引號)。
-    2. 使用 list join 的方式構建 SSML，確保絕對無換行符號。
+    v1.6 修正:
+    1. 將 xmlns:mstts 移至 express-as 標籤，保持 speak 標籤乾淨，避免 edge-tts 偵測失敗。
+    2. 回歸使用單引號 '，與 edge-tts 內部格式完全一致。
+    3. 移除多餘的 prosody 標籤（如果參數未變更）。
     """
     
     # 策略 1: 安全模式 (Safe Mode) - 適用於預設風格
@@ -128,21 +128,22 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         # 檢查參數是否有變動
         is_default_prosody = (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 構建 Prosody 部分 (使用雙引號)
+        # 構建 Prosody 部分 (單引號)
         if is_default_prosody:
             content_part = escaped_text
         else:
-            content_part = f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">{escaped_text}</prosody>'
+            content_part = f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>{escaped_text}</prosody>"
 
-        # 構建完整 SSML (嚴格模式：無換行，雙引號)
+        # 構建完整 SSML (v1.6: 命名空間下移，使用單引號)
+        # 這裡將 xmlns:mstts 放在 express-as 標籤上，讓 speak 標籤看起來像標準的 edge-tts 輸出
         ssml_parts = [
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">',
-            f'<voice name="{voice}">',
-            f'<mstts:express-as style="{style}">',
+            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xml:lang='{lang_code}'>",
+            f"<voice name='{voice}'>",
+            f"<mstts:express-as xmlns:mstts='https://www.w3.org/2001/mstts' style='{style}'>",
             content_part,
-            '</mstts:express-as>',
-            '</voice>',
-            '</speak>'
+            "</mstts:express-as>",
+            "</voice>",
+            "</speak>"
         ]
         
         # 使用空字串連接，確保是一整行緊湊的字串
@@ -155,12 +156,11 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         if chunk["type"] == "audio":
             audio_data.write(chunk["data"])
             
-    return audio_data.getvalue()
+    return audio_data.getvalue(), (communicate._text if hasattr(communicate, '_text') else "SSML Hidden")
 
 def parse_input(text):
     """
     解析輸入文本
-    格式：[檔名] [空白] [內容]
     """
     items = []
     lines = text.split('\n')
@@ -187,27 +187,16 @@ def main():
     # --- 側邊欄：參數設定 ---
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        # --- 新增版本號顯示 ---
-        st.caption("版本：v1.5 (SSML 雙引號修復版)")
+        st.caption("版本：v1.6 (命名空間隔離修復)")
         
         # 1. 語音模型選擇
         st.subheader("1. 選擇聲音")
-        # 修改預設 index=1 (對應簡體中文)
-        category = st.selectbox(
-            "語言類別", 
-            options=list(VOICES.keys()),
-            index=1 
-        )
+        category = st.selectbox("語言類別", options=list(VOICES.keys()), index=1)
         voice_options = VOICES[category]
-        selected_voice_key = st.selectbox(
-            "語音角色",
-            options=list(voice_options.keys()),
-            format_func=lambda x: voice_options[x]
-        )
+        selected_voice_key = st.selectbox("語音角色", options=list(voice_options.keys()), format_func=lambda x: voice_options[x])
 
         # 2. 語音細節調整
         st.subheader("2. 語音調整")
-        
         speed_val = st.slider("語速 (Rate)", -50, 100, 0, format="%d%%", step=5)
         rate_str = f"{'+' if speed_val >= 0 else ''}{speed_val}%"
         
@@ -217,33 +206,23 @@ def main():
         pitch_val = st.slider("音調 (Pitch)", -50, 50, 0, format="%dHz", step=5)
         pitch_str = f"{'+' if pitch_val >= 0 else ''}{pitch_val}Hz"
 
-        # 3. 進階功能 (邏輯修復版)
+        # 3. 進階功能
         st.subheader("3. 進階 (Advanced)")
-        
-        # 判斷當前角色是否支援 Style
         supports_style = selected_voice_key in VOICES_WITH_STYLE
         
         if supports_style:
             st.success("✅ 此模型支援情感調整")
-            selected_style_key = st.selectbox(
-                "情感風格 (Style)",
-                options=list(STYLES.keys()),
-                format_func=lambda x: STYLES[x],
-                index=0
-            )
+            selected_style_key = st.selectbox("情感風格 (Style)", options=list(STYLES.keys()), format_func=lambda x: STYLES[x], index=0)
         else:
-            st.info("ℹ️ 此模型不支援情感調整 (已鎖定)")
-            # 顯示一個禁用的選單，視覺上讓用戶知道不能選
-            st.selectbox(
-                "情感風格 (Style)",
-                options=["general"],
-                format_func=lambda x: "預設 (General)",
-                disabled=True
-            )
+            st.info("ℹ️ 此模型不支援情感調整")
+            st.selectbox("情感風格 (Style)", options=["general"], format_func=lambda x: "預設 (General)", disabled=True)
             selected_style_key = "general"
         
         st.markdown("---")
-        st.caption("檔案格式：預設為 **MP3** (Edge-TTS 原生高音質)")
+        
+        # 除錯模式開關
+        show_debug = st.checkbox("顯示 SSML (除錯用)", value=False)
+        st.caption("若遇到 'speak version...' 朗讀問題，請開啟此選項並截圖回報。")
 
     # --- 主區域 ---
     st.title("🧩 格育 - 兒童語音合成工具 (Edge-TTS)")
@@ -266,8 +245,6 @@ def main():
             st.success(f"已偵測到 **{len(items)}** 個待處理項目")
             with st.expander("點擊預覽解析結果"):
                 st.table(items[:5])
-                if len(items) > 5:
-                    st.caption("...以及其他項目")
         else:
             st.info("👆 請在上方輸入框輸入文字以開始")
 
@@ -281,10 +258,12 @@ def main():
             else:
                 with st.spinner("生成中..."):
                     try:
-                        audio_bytes = asyncio.run(generate_audio_stream(
+                        audio_bytes, debug_ssml = asyncio.run(generate_audio_stream(
                             preview_text, selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key
                         ))
                         st.audio(audio_bytes, format="audio/mp3")
+                        if show_debug and selected_style_key != "general":
+                            st.text_area("Debug SSML", debug_ssml, height=150)
                     except Exception as e:
                         st.error(f"錯誤: {str(e)}")
 
@@ -307,7 +286,7 @@ def main():
                 
                 try:
                     # 生成音訊
-                    audio_bytes = asyncio.run(generate_audio_stream(
+                    audio_bytes, _ = asyncio.run(generate_audio_stream(
                         item['text'], selected_voice_key, rate_str, volume_str, pitch_str, selected_style_key
                     ))
                     
