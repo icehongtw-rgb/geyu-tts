@@ -106,30 +106,35 @@ STYLES = {
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general"):
     """
     使用 edge-tts 生成音訊並返回 bytes。
+    修正版：統一強制使用手動構建 SSML，解決標籤被朗讀的問題。
     """
-    # 雙重保險：如果語音不在支援名單內，強制設為 general，避免 API 報錯
-    if voice not in VOICES_WITH_STYLE:
-        style = "general"
+    escaped_text = escape(text)
+    
+    # 決定是否加上情感標籤 (express-as)
+    # 只有當 style 不是 general 且 語音支援 style 時才加
+    style_open = ""
+    style_close = ""
+    
+    if style != "general" and voice in VOICES_WITH_STYLE:
+        style_open = f"<mstts:express-as style='{style}'>"
+        style_close = "</mstts:express-as>"
 
-    # 判斷是否需要使用 SSML
-    if style != "general":
-        escaped_text = escape(text)
-        ssml = (
-            f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='en-US'>"
-            f"<voice name='{voice}'>"
-            f"<mstts:express-as style='{style}'>"
-            f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>"
-            f"{escaped_text}"
-            f"</prosody>"
-            f"</mstts:express-as>"
-            f"</voice>"
-            f"</speak>"
-        )
-        # 修正：當使用 SSML 時，不需傳入 rate/volume/pitch 參數，也不要傳 None，直接初始化即可
-        communicate = edge_tts.Communicate(ssml, voice)
-    else:
-        # 一般模式 (純文字)
-        communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
+    # 手動構建完整的 SSML
+    # 這樣可以確保 rate/volume/pitch 參數被正確解讀，而不是被當作文字
+    ssml = (
+        f"<speak version='1.0' xmlns='http://www.w3.org/2001/10/synthesis' xmlns:mstts='https://www.w3.org/2001/mstts' xml:lang='en-US'>"
+        f"<voice name='{voice}'>"
+        f"{style_open}"
+        f"<prosody rate='{rate}' volume='{volume}' pitch='{pitch}'>"
+        f"{escaped_text}"
+        f"</prosody>"
+        f"{style_close}"
+        f"</voice>"
+        f"</speak>"
+    )
+
+    # 重要：傳入 SSML 給 Communicate 時，不要再傳入 rate/volume/pitch 參數
+    communicate = edge_tts.Communicate(ssml, voice)
 
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
