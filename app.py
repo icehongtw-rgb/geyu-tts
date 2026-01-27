@@ -13,13 +13,11 @@ HAS_FFMPEG = False
 HAS_PYDUB = False
 PYDUB_STATUS = "Checking..."
 
-# 檢查 FFmpeg (系統層級)
+# 檢查 FFmpeg
 if shutil.which("ffmpeg"):
     HAS_FFMPEG = True
-else:
-    HAS_FFMPEG = False
 
-# 檢查 Pydub (Python 層級)
+# 檢查 Pydub
 try:
     from pydub import AudioSegment
     HAS_PYDUB = True
@@ -103,36 +101,39 @@ def trim_silence(audio_bytes):
     
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v3.2: 修復 xml:lang) ---
+# --- 5. 核心生成邏輯 (v4.0: 安全格式版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
+    debug_ssml = None
+    
     # 如果選擇了風格，必須使用 SSML
     if style != "general":
         escaped_text = escape(text)
         
-        # 【關鍵修復】: 動態提取語言代碼 (例如 zh-CN)
-        # 這是微軟 API 識別 SSML 的必要條件！沒有這個，它就會把 XML 當文字唸出來。
-        try:
-            lang_code = "-".join(voice.split("-")[:2])
-        except:
-            lang_code = "zh-CN" # 預設值防止崩潰
+        # 提取語言代碼
+        lang_code = "zh-CN"
+        if "zh-TW" in voice: lang_code = "zh-TW"
+        if "en-US" in voice: lang_code = "en-US"
 
-        # 構建 SSML: 
-        # 1. 補回 xml:lang="{lang_code}"
-        # 2. 保持雙引號結構
-        ssml = (
-            f'<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">'
-            f'<voice name="{voice}">'
-            f'<mstts:express-as style="{style}">'
-            f'<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">'
-            f'{escaped_text}'
-            f'</prosody>'
-            f'</mstts:express-as>'
-            f'</voice>'
-            f'</speak>'
-        )
-        communicate = edge_tts.Communicate(ssml, voice)
+        # 【v4.0 關鍵修復】: 使用三引號區塊，確保絕對沒有隱形換行問題
+        # 並且強制在屬性之間保留空格
+        ssml_content = f"""<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="{lang_code}">
+<voice name="{voice}">
+<mstts:express-as style="{style}">
+<prosody rate="{rate}" volume="{volume}" pitch="{pitch}">
+{escaped_text}
+</prosody>
+</mstts:express-as>
+</voice>
+</speak>"""
+        
+        # 移除所有換行符，變成緊湊的一行，這是微軟最喜歡的格式
+        # 同時使用 strip() 確保頭尾絕對沒有空白
+        clean_ssml = ssml_content.replace("\n", "").strip()
+        debug_ssml = clean_ssml # 記錄下來供調試
+        
+        communicate = edge_tts.Communicate(clean_ssml, voice)
     else:
-        # 一般模式 (無 SSML)
+        # 一般模式
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
 
     audio_data = io.BytesIO()
@@ -145,23 +146,19 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     if remove_silence:
         final_bytes = trim_silence(final_bytes)
         
-    return final_bytes
+    return final_bytes, debug_ssml
 
 # --- 6. 介面邏輯 ---
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption("版本：v3.2 (SSML 語言修復版)")
+        st.caption("版本：v4.0 (安全 SSML 版)")
         
-        # 環境診斷顯示
+        # 環境診斷
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整：自動去靜音功能已就緒</div>', unsafe_allow_html=True)
         else:
-            missing = []
-            if not HAS_PYDUB: missing.append("Pydub (請確認已將 Python 改為 3.11)")
-            if not HAS_FFMPEG: missing.append("FFmpeg (檢查 packages.txt)")
-            error_msg = "<br>".join(missing)
-            st.markdown(f'<div class="status-err">⚠️ 環境缺失：<br>{error_msg}</div>', unsafe_allow_html=True)
+            st.markdown('<div class="status-err">⚠️ 環境缺失：請確認 Python 版本為 3.11</div>', unsafe_allow_html=True)
 
         st.subheader("1. 語音")
         category = st.selectbox("語言", list(VOICES.keys()))
@@ -176,17 +173,18 @@ def main():
         vol_str = "+0%"
 
         st.subheader("3. 風格")
-        # 智慧判斷是否顯示風格
         if selected_voice in VOICES_WITH_STYLE:
             style = st.selectbox("情感", list(STYLES.keys()), format_func=lambda x: STYLES[x], index=1)
         else:
             style = "general"
-            st.selectbox("情感", ["預設 (General)"], disabled=True, help="此角色不支援情感調整")
+            st.selectbox("情感", ["預設 (General)"], disabled=True)
             if "zh-TW" in selected_voice:
-                st.caption("ℹ️ 台灣語音暫不支援情感，建議調整語速與音調來模擬。")
+                st.caption("ℹ️ 台灣語音暫不支援情感")
 
-        # 自動勾選去靜音 (如果是可用狀態)
         remove_silence_opt = st.checkbox("✨ 自動去除頭尾靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
+        
+        # 新增調試選項
+        show_debug = st.checkbox("🐞 顯示 SSML 代碼 (若生成錯誤請勾選)", value=False)
 
     st.title("🧩 格育 - 兒童語音工具")
     
@@ -200,8 +198,10 @@ def main():
         if st.button("生成試聽"):
             with st.spinner("生成中..."):
                 try:
-                    data = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
+                    data, dbg = asyncio.run(generate_audio_stream(test_txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     st.audio(data, format='audio/mp3')
+                    if show_debug and dbg:
+                        st.text_area("發送給微軟的指令 (SSML)", dbg, height=100)
                 except Exception as e:
                     st.error(f"錯誤: {e}")
 
@@ -219,7 +219,7 @@ def main():
         with zipfile.ZipFile(zip_buf, "w") as zf:
             for i, (fname, txt) in enumerate(items):
                 try:
-                    data = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
+                    data, dbg = asyncio.run(generate_audio_stream(txt, selected_voice, rate_str, vol_str, pitch_str, style, remove_silence_opt))
                     zf.writestr(f"{fname}.mp3", data)
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
