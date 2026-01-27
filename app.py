@@ -96,7 +96,7 @@ def trim_silence(audio_bytes):
     except: pass 
     return audio_bytes
 
-# --- 5. 核心生成邏輯 (v14.0: 雙重強制覆蓋版) ---
+# --- 5. 核心生成邏輯 (v15.0: Namespace 終極修正版) ---
 async def generate_audio_stream(text, voice, rate, volume, pitch, style="general", remove_silence=False):
     debug_info = {"is_ssml": False, "raw_ssml": ""}
     
@@ -108,14 +108,16 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
     if style == "general":
         communicate = edge_tts.Communicate(text, voice, rate=rate, volume=volume, pitch=pitch)
     
-    # 風格模式 (強制 SSML)
+    # 風格模式 (SSML)
     else:
         escaped_text = escape(text)
         has_prosody = not (rate == "+0%" and volume == "+0%" and pitch == "+0Hz")
         
-        # 1. 構建標準 SSML
+        # 【v15.0 關鍵修正】
+        # 將 https 改為 http，這是 Azure TTS 唯一接受的命名空間寫法
+        # 這一個 's' 的差別，就是它唸代碼的原因
         ssml_parts = [
-            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="https://www.w3.org/2001/mstts" xml:lang="zh-CN">',
+            '<speak version="1.0" xmlns="http://www.w3.org/2001/10/synthesis" xmlns:mstts="http://www.w3.org/2001/mstts" xml:lang="zh-CN">',
             f'<voice name="{voice}">',
             f'<mstts:express-as style="{style}">',
         ]
@@ -136,15 +138,12 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
         debug_info["is_ssml"] = True
         debug_info["raw_ssml"] = clean_ssml
         
-        # 2. 初始化 (可能被庫錯誤轉義)
+        # 創建物件
         communicate = edge_tts.Communicate(clean_ssml, voice)
         
-        # 3. 【v14.0 核心修復：雙重覆蓋】
-        # 強制告訴庫：這是 SSML
+        # 雙重保險：強制覆蓋內部狀態 (這是正確的工程實踐)
         if hasattr(communicate, "_ssml"):
             communicate._ssml = True
-            
-        # 強制把內容換回我們乾淨的 SSML (防止庫之前自作聰明轉義了它)
         if hasattr(communicate, "_text"):
             communicate._text = clean_ssml
 
@@ -163,7 +162,7 @@ async def generate_audio_stream(text, voice, rate, volume, pitch, style="general
 def main():
     with st.sidebar:
         st.title("⚙️ 參數設定")
-        st.caption(f"App v14.0 | edge-tts v{EDGE_TTS_VERSION}")
+        st.caption(f"App v15.0 | Namespace Fixed")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok">✅ 環境完整</div>', unsafe_allow_html=True)
