@@ -69,7 +69,7 @@ export default function StreamlitMock() {
                 <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900 tracking-tight">
                     參數設定
                 </h2>
-                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 19.0 / MONOCHROME</p>
+                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 19.1 / MONOCHROME</p>
             </div>
             
             {/* Status Badge - Neutral Gray */}
@@ -86,7 +86,7 @@ export default function StreamlitMock() {
                         <select 
                             value={category}
                             onChange={(e) => setCategory(e.target.value)}
-                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-800 focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
                         >
                             {Object.keys(VOICES).map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
@@ -99,7 +99,7 @@ export default function StreamlitMock() {
                             <select 
                                 value={voice}
                                 onChange={(e) => setVoice(e.target.value)}
-                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-800 focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
                             >
                                 {VOICES[category].map(v => (
                                     <option key={v} value={v}>{v}</option>
@@ -117,7 +117,7 @@ export default function StreamlitMock() {
                 
                 <div className="space-y-3">
                     <select 
-                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-zinc-800 focus:border-transparent outline-none cursor-pointer hover:border-zinc-300"
+                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-2 focus:ring-black focus:border-transparent outline-none cursor-pointer hover:border-zinc-300"
                         value={styleKey}
                         onChange={(e) => handleStyleChange(e.target.value)}
                     >
@@ -146,7 +146,7 @@ export default function StreamlitMock() {
                             type="range" min="-100" max="100" 
                             value={rate} 
                             onChange={e => { setRate(Number(e.target.value)); setStyleKey('custom'); }} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-zinc-900 hover:accent-black" 
+                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
                         />
                     </div>
                     
@@ -159,7 +159,7 @@ export default function StreamlitMock() {
                             type="range" min="-100" max="100" 
                             value={pitch} 
                             onChange={e => { setPitch(Number(e.target.value)); setStyleKey('custom'); }} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-zinc-900 hover:accent-black" 
+                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
                         />
                     </div>
 
@@ -172,7 +172,7 @@ export default function StreamlitMock() {
                             type="range" min="-50" max="50" 
                             value={volume} 
                             onChange={e => setVolume(Number(e.target.value))} 
-                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-zinc-900 hover:accent-black" 
+                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-black hover:accent-zinc-800" 
                         />
                     </div>
                 </div>
@@ -184,7 +184,7 @@ export default function StreamlitMock() {
                         type="checkbox" 
                         checked={trimSilence} 
                         onChange={e => setTrimSilence(e.target.checked)}
-                        className="w-4 h-4 accent-zinc-900 rounded border-zinc-300 focus:ring-zinc-500"
+                        className="w-4 h-4 accent-black rounded border-zinc-300 focus:ring-zinc-500"
                     />
                     <div className="flex flex-col">
                         <span className="text-sm font-medium text-zinc-700 group-hover:text-black">智能去靜音</span>
@@ -199,7 +199,7 @@ export default function StreamlitMock() {
       <div className="flex-1 p-8 md:p-16 max-w-7xl mx-auto space-y-12 overflow-y-auto">
         <header className="space-y-4 pb-8 border-b border-zinc-100">
             <div className="flex items-center gap-3 mb-2">
-                 <div className="bg-zinc-900 text-white p-2 rounded-lg">
+                 <div className="bg-black text-white p-2 rounded-lg">
                     <Zap className="w-5 h-5" />
                  </div>
                  <span className="text-xs font-bold text-zinc-400 tracking-wider uppercase">Geyu Studio</span>
@@ -225,7 +225,7 @@ export default function StreamlitMock() {
                 
                 <div className="relative group">
                     <textarea 
-                        className="w-full h-[500px] p-6 border border-zinc-200 rounded-xl font-mono text-sm leading-8 text-zinc-700 focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900 outline-none resize-none shadow-sm transition-all bg-white placeholder:text-zinc-300"
+                        className="w-full h-[500px] p-6 border border-zinc-200 rounded-xl font-mono text-sm leading-8 text-zinc-700 focus:border-black focus:ring-1 focus:ring-black outline-none resize-none shadow-sm transition-all bg-white placeholder:text-zinc-300"
                         placeholder={`001 蘋果\n002 香蕉\n1-1 這是第一課的內容\nintroduction Welcome to the class`}
                         value={text}
                         onChange={e => setText(e.target.value)}
@@ -271,7 +271,7 @@ export default function StreamlitMock() {
                     disabled={!text}
                     className={`w-full py-5 rounded-xl font-bold text-sm tracking-widest uppercase transition-all shadow-xl transform flex items-center justify-center gap-3 ${
                         text 
-                        ? 'bg-zinc-900 text-white hover:bg-black hover:-translate-y-1 hover:shadow-2xl' 
+                        ? 'bg-black text-white hover:bg-zinc-900 hover:-translate-y-1 hover:shadow-2xl' 
                         : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
                     }`}
                 >
@@ -285,7 +285,7 @@ export default function StreamlitMock() {
       {/* Floating Preview Warning - Minimalist */}
       <div className="fixed bottom-6 right-6 bg-white/80 backdrop-blur border border-zinc-200 p-4 rounded-lg shadow-2xl max-w-xs z-50">
          <div className="flex items-center gap-3">
-            <div className="w-1.5 h-1.5 rounded-full bg-zinc-900 animate-pulse"></div>
+            <div className="w-1.5 h-1.5 rounded-full bg-black animate-pulse"></div>
             <span className="text-xs font-mono text-zinc-500">UI Preview Mode</span>
          </div>
       </div>

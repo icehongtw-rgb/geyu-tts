@@ -22,39 +22,124 @@ except ImportError:
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
-# Minimalist Monochrome CSS
+# Minimalist Monochrome CSS with Aggressive Streamlit Overrides
 st.markdown("""
     <style>
     /* Global Background & Font */
     .stApp { 
         background-color: #ffffff; 
         color: #18181b;
+        font-family: 'Inter', sans-serif;
     }
     
-    /* Buttons - Override Primary to Black */
-    div.stButton > button:first-child {
-        background-color: #18181b;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        padding: 0.75rem 1.5rem;
-        font-weight: 600;
-        transition: all 0.2s;
+    /* --- BUTTONS (復刻 App.tsx 的設計) --- */
+    /* Target both regular buttons and download buttons */
+    div.stButton > button, div.stDownloadButton > button {
+        width: 100%; /* 全寬 */
+        background-color: #18181b !important; /* Zinc-900 */
+        color: white !important;
+        border-radius: 0.75rem !important; /* rounded-xl */
+        border: none !important;
+        padding-top: 1rem !important;
+        padding-bottom: 1rem !important;
+        font-weight: 700 !important; /* font-bold */
+        letter-spacing: 0.1em !important; /* tracking-widest */
+        text-transform: uppercase !important;
+        font-size: 0.875rem !important; /* text-sm */
+        transition: all 0.2s !important;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06) !important;
     }
-    div.stButton > button:first-child:hover {
-        background-color: #000000;
-        color: white;
-        border: none;
-        transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    div.stButton > button:first-child:focus {
-        border: none;
-        outline: none;
-        box-shadow: none;
+    
+    div.stButton > button:hover, div.stDownloadButton > button:hover {
+        background-color: #000000 !important;
+        transform: translateY(-2px);
+        box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
     }
 
-    /* Status Boxes - Monochrome */
+    div.stButton > button:active, div.stDownloadButton > button:active {
+        transform: translateY(0);
+    }
+    
+    div.stButton > button:disabled {
+        background-color: #f4f4f5 !important;
+        color: #a1a1aa !important;
+        cursor: not-allowed;
+        box-shadow: none !important;
+        transform: none !important;
+    }
+
+    /* --- INPUTS & TEXTAREA (復刻舒適間距) --- */
+    .stTextArea textarea { 
+        min-height: 500px !important;
+        border-radius: 0.75rem !important; /* rounded-xl */
+        border: 1px solid #e4e4e7 !important; /* zinc-200 */
+        background-color: #ffffff !important;
+        font-family: monospace !important;
+        caret-color: #18181b; 
+        
+        /* 關鍵：增加內距與行高，提升閱讀感 */
+        padding: 1.5rem !important; /* p-6 */
+        line-height: 2rem !important; /* leading-8 */
+        font-size: 0.875rem !important; /* text-sm */
+        box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05) !important;
+    }
+    
+    .stTextArea textarea:focus {
+        border-color: #18181b !important;
+        box-shadow: 0 0 0 1px #18181b !important;
+    }
+
+    /* --- ALERTS & STATUS (去除綠色/藍色) --- */
+    
+    /* Success Message (原本是綠色) -> 改為極簡灰 */
+    div[data-baseweb="notification"], div[data-testid="stAlert"] {
+        background-color: #f4f4f5 !important; /* zinc-100 */
+        border: 1px solid #e4e4e7 !important;
+        color: #18181b !important;
+        border-radius: 0.5rem !important;
+    }
+    
+    /* Icon color in alerts */
+    div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
+        fill: #18181b !important;
+        color: #18181b !important;
+    }
+    
+    /* Progress Bar (原本是藍色) -> 改為黑色 */
+    .stProgress > div > div > div > div {
+        background-color: #18181b !important;
+    }
+
+    /* --- SIDEBAR COMPONENTS --- */
+    
+    /* Sliders */
+    div[data-baseweb="slider"] div[class*="Thumb"] {
+        background-color: #18181b !important;
+        border-color: #18181b !important;
+    }
+    div[data-baseweb="slider"] span[class*="fill"] {
+        background-color: #18181b !important;
+    }
+    
+    /* Checkboxes */
+    div[data-baseweb="checkbox"] span[class*="Checked"] {
+        background-color: #18181b !important;
+        border-color: #18181b !important;
+    }
+    
+    /* Selectbox Focus */
+    div[data-baseweb="select"] div:focus-within {
+        border-color: #18181b !important;
+        box-shadow: 0 0 0 1px #18181b !important;
+    }
+    
+    /* Sidebar Background */
+    [data-testid="stSidebar"] {
+        background-color: #fafafa;
+        border-right: 1px solid #f4f4f5;
+    }
+    
+    /* Status Badges */
     .status-ok { 
         background-color: #f4f4f5; 
         color: #52525b; 
@@ -73,34 +158,8 @@ st.markdown("""
         padding: 0.75rem; 
         border-radius: 8px; 
         margin-bottom: 15px; 
-        border: 1px solid #e4e4e7; /* Neutral border for error too in minimalist design, relying on text */
-        font-size: 0.9rem;
-    }
-    
-    /* Text Area */
-    .stTextArea textarea { 
-        min-height: 450px; 
-        border-radius: 12px;
         border: 1px solid #e4e4e7;
-        background-color: #fafafa;
-        font-family: monospace;
-    }
-    .stTextArea textarea:focus {
-        border-color: #18181b;
-        box-shadow: 0 0 0 1px #18181b;
-    }
-
-    /* Sidebar */
-    [data-testid="stSidebar"] {
-        background-color: #fafafa;
-        border-right: 1px solid #f4f4f5;
-    }
-    
-    /* Headers */
-    h1, h2, h3 {
-        font-family: 'Inter', sans-serif;
-        color: #18181b;
-        font-weight: 700;
+        font-size: 0.9rem;
     }
     </style>
 """, unsafe_allow_html=True)
@@ -211,7 +270,7 @@ async def generate_audio_stream(text, voice, rate_val, volume_val, pitch_val, re
 def main():
     with st.sidebar:
         st.title("參數設定")
-        st.caption("Version 19.0 / Monochrome")
+        st.caption("Version 19.1 / Monochrome")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
@@ -244,7 +303,9 @@ def main():
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
     
-    text_input = st.text_area("輸入內容 (編號 內容)", height=450, placeholder="001 蘋果\n002 香蕉\n\n(若未輸入編號，系統將自動產生)")
+    # 這裡的 placeholder 改用 f-string 來包含換行符號，避免排版問題
+    placeholder_txt = "001 蘋果\n002 香蕉\n1-1 第一課\n\n(若未輸入編號，系統將自動產生)"
+    text_input = st.text_area("輸入內容 (編號 內容)", height=450, placeholder=placeholder_txt)
     
     items = []
     lines = text_input.split('\n')
@@ -258,11 +319,13 @@ def main():
                 auto_id = f"auto_{i+1:03d}"
                 items.append((auto_id, parts[0]))
     
-    # 使用空白將按鈕推到底部或增加間距
     st.markdown("<br>", unsafe_allow_html=True)
     
+    # 使用 container 來包裹按鈕，雖然 st.button 無法直接 width:100%，但 CSS 會強制覆寫
     if st.button(f"開始批量生成 ({len(items)} 檔案)", type="primary", disabled=len(items)==0):
         zip_buffer = io.BytesIO()
+        
+        # 自定義進度條樣式已在上方 CSS 設定為黑色
         prog = st.progress(0)
         
         with zipfile.ZipFile(zip_buffer, "w") as zf:
@@ -273,7 +336,11 @@ def main():
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
+        
+        # 這裡的 success 樣式已在上方 CSS 設定為灰白配色，不再是綠色
         st.success("生成完成！")
+        
+        # 下載按鈕也會繼承上方的全寬黑按鈕樣式
         st.download_button("下載 ZIP 壓縮檔", zip_buffer.getvalue(), "audio.zip", "application/zip")
 
 if __name__ == "__main__":
