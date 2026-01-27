@@ -70,8 +70,9 @@ const STYLES = [
 ];
 
 export default function StreamlitMock() {
-  const [category, setCategory] = useState("繁體中文 (台灣)");
-  const [voice, setVoice] = useState(VOICES["繁體中文 (台灣)"][0]);
+  // Sync with app.py v1.2 defaults: Simplified Chinese & Xiaoxiao
+  const [category, setCategory] = useState("簡體中文 (中國 - 支援多情感)");
+  const [voice, setVoice] = useState(VOICES["簡體中文 (中國 - 支援多情感)"][0]);
   const [rate, setRate] = useState(0);
   const [volume, setVolume] = useState(0);
   const [pitch, setPitch] = useState(0);
@@ -80,7 +81,11 @@ export default function StreamlitMock() {
   
   // Update voice when category changes
   useEffect(() => {
-    setVoice(VOICES[category][0]);
+    // When switching categories, pick the first voice
+    // If switching TO Simplified Chinese, ensure Xiaoxiao (index 0) is picked
+    if (VOICES[category]) {
+        setVoice(VOICES[category][0]);
+    }
   }, [category]);
 
   // Logic: Check if current voice supports style
@@ -101,6 +106,8 @@ export default function StreamlitMock() {
             <h2 className="text-xl font-bold flex items-center gap-2">
                 ⚙️ 參數設定
             </h2>
+            {/* Added Version Label */}
+            <p className="text-xs text-slate-500 -mt-2">版本：v1.2 (預設小曉/SSML修復)</p>
             
             <div className="space-y-2">
                 <h3 className="text-sm font-semibold text-slate-600">1. 選擇聲音</h3>
