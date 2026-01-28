@@ -158,14 +158,14 @@ PIPER_MODELS = {
     "zh_CN-huayan-medium": {
         "name": "🇨🇳 Huayan (華顏 - 自然女聲) 🔥",
         "repo": "rhasspy/piper-voices",
-        "file_onnx": "zh_CN/zh_CN-huayan-medium/zh_CN-huayan-medium.onnx",
-        "file_json": "zh_CN/zh_CN-huayan-medium/zh_CN-huayan-medium.onnx.json"
+        "file_onnx": "zh_CN/huayan/medium/zh_CN-huayan-medium.onnx",
+        "file_json": "zh_CN/huayan/medium/zh_CN-huayan-medium.onnx.json"
     },
     "zh_CN-xiaou-medium": {
         "name": "🇨🇳 Xiaou (小優 - 溫柔女聲)",
         "repo": "rhasspy/piper-voices",
-        "file_onnx": "zh_CN/zh_CN-xiaou-medium/zh_CN-xiaou-medium.onnx",
-        "file_json": "zh_CN/zh_CN-xiaou-medium/zh_CN-xiaou-medium.onnx.json"
+        "file_onnx": "zh_CN/xiaou/medium/zh_CN-xiaou-medium.onnx",
+        "file_json": "zh_CN/xiaou/medium/zh_CN-xiaou-medium.onnx.json"
     }
 }
 
