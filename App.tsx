@@ -80,26 +80,18 @@ export default function StreamlitMock() {
   return (
     <div className="min-h-screen bg-[#fafafa] flex font-sans text-zinc-800 selection:bg-red-100 selection:text-red-900">
       {/* Sidebar Mock - Minimalist Gray */}
-      <div className="w-[24rem] bg-white border-r border-zinc-100 p-8 flex flex-col gap-8 shrink-0 overflow-y-auto h-screen sticky top-0 hidden md:flex">
-        <div className="space-y-6">
+      <div className="w-[26rem] bg-white border-r border-zinc-100 p-6 flex flex-col shrink-0 h-screen sticky top-0 hidden md:flex">
+        
+        {/* Top Section: Title & Controls */}
+        <div className="flex-1 overflow-y-auto space-y-6 pr-2">
             <div>
                 <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900 tracking-tight">
                     參數設定
                 </h2>
-                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 1.0.1 / DUAL ENGINE</p>
             </div>
             
-            {/* Status Badge */}
-            <div className="bg-zinc-50 border border-zinc-200 text-zinc-600 px-3 py-2.5 rounded-md text-xs flex items-center gap-2 font-medium">
-                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                <span>Python 環境就緒</span>
-            </div>
-
             {/* Engine Selection */}
             <div className="space-y-2">
-                <label className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                    <Server className="w-3 h-3" /> TTS 引擎庫
-                </label>
                 <div className="flex gap-2">
                     <button 
                         onClick={() => setEngine("edge")}
@@ -120,45 +112,43 @@ export default function StreamlitMock() {
             {engine === 'edge' && (
                 <>
                     <div className="space-y-4 pt-4 border-t border-zinc-100">
-                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Voice Selection</h3>
-                        <div className="space-y-3">
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-zinc-700">語言區域</label>
+                        <div className="space-y-4">
+                            {/* Horizontal Layout for Category */}
+                            <div className="flex items-center justify-between gap-4">
+                                <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">語言區域</label>
                                 <select 
                                     value={category}
                                     onChange={(e) => setCategory(e.target.value)}
-                                    className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                                    className="flex-1 p-2 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
                                 >
                                     {Object.keys(EDGE_VOICES).map(cat => (
                                         <option key={cat} value={cat}>{cat}</option>
                                     ))}
                                 </select>
                             </div>
-                            <div className="space-y-1.5">
-                                <label className="text-sm font-medium text-zinc-700">語音角色</label>
-                                <div className="relative">
-                                    <select 
-                                        value={voice}
-                                        onChange={(e) => setVoice(e.target.value)}
-                                        className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
-                                    >
-                                        {EDGE_VOICES[category].map(v => (
-                                            <option key={v} value={v}>{v}</option>
-                                        ))}
-                                    </select>
-                                </div>
+
+                            {/* Horizontal Layout for Voice */}
+                            <div className="flex items-center justify-between gap-4">
+                                <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">語音角色</label>
+                                <select 
+                                    value={voice}
+                                    onChange={(e) => setVoice(e.target.value)}
+                                    className="flex-1 p-2 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
+                                >
+                                    {EDGE_VOICES[category].map(v => (
+                                        <option key={v} value={v}>{v}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     </div>
 
                     <div className="space-y-4 pt-4 border-t border-zinc-100">
-                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex justify-between items-center">
-                            Style & Tone
-                        </h3>
-                        
-                        <div className="space-y-3">
+                         {/* Horizontal Layout for Style */}
+                        <div className="flex items-center justify-between gap-4">
+                            <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">情感預設</label>
                             <select 
-                                className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none cursor-pointer hover:border-zinc-300"
+                                className="flex-1 p-2 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none cursor-pointer hover:border-zinc-300"
                                 value={styleKey}
                                 onChange={(e) => handleStyleChange(e.target.value)}
                             >
@@ -170,10 +160,6 @@ export default function StreamlitMock() {
                     </div>
 
                     <div className="space-y-6 pt-4 border-t border-zinc-100">
-                        <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
-                            Fine Tuning
-                        </h3>
-                        
                         <div className="space-y-5">
                             <div className="group">
                                 <div className="flex justify-between text-xs mb-2 text-zinc-600">
@@ -223,15 +209,16 @@ export default function StreamlitMock() {
                 <div className="space-y-4 pt-4 border-t border-zinc-100">
                      <div className="bg-zinc-50 border border-zinc-200 rounded-md p-3 text-xs text-zinc-500 leading-relaxed">
                         <span className="font-bold text-zinc-700 block mb-1">關於 Google TTS</span>
-                        完全免費且穩定，但語音較為機械化，且不支援語速（除慢速外）、音調與情感調整。
+                        完全免費且穩定，但語音較為機械化。
                     </div>
 
-                    <div className="space-y-1.5">
-                        <label className="text-sm font-medium text-zinc-700">語言</label>
+                    {/* Horizontal Layout for Language */}
+                    <div className="flex items-center justify-between gap-4">
+                        <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">語言選擇</label>
                         <select 
                             value={googleLang}
                             onChange={(e) => setGoogleLang(e.target.value)}
-                            className="w-full p-3 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow appearance-none cursor-pointer hover:border-zinc-300"
+                            className="flex-1 p-2 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
                         >
                             {Object.keys(GOOGLE_LANGS).map(l => (
                                 <option key={l} value={l}>{l}</option>
@@ -266,14 +253,14 @@ export default function StreamlitMock() {
                     />
                     <div className="flex flex-col">
                         <span className="text-sm font-medium text-zinc-700 group-hover:text-black">智能去靜音</span>
-                        <span className="text-[10px] text-zinc-400">自動移除音檔前後的空白片段</span>
+                        <span className="text-[10px] text-zinc-400">移除音檔前後空白</span>
                     </div>
                 </label>
 
                 {trimSilence && (
                     <div className="px-3 pb-3">
                          <div className="flex justify-between text-xs mb-2 text-zinc-600">
-                            <span className="font-medium">靜音判定閾值</span>
+                            <span className="font-medium">靜音閾值</span>
                             <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{silenceThreshold}dB</span>
                         </div>
                         <input 
@@ -282,13 +269,24 @@ export default function StreamlitMock() {
                             onChange={e => setSilenceThreshold(Number(e.target.value))} 
                             className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
                         />
-                        <p className="text-[10px] text-zinc-400 mt-2 leading-tight">
-                            數值越小（向左）判定越嚴格，保留更多；數值越大（向右）判定越寬鬆，刪除更多。
-                        </p>
                     </div>
                 )}
             </div>
         </div>
+
+        {/* Bottom Section: Status & Version */}
+        <div className="mt-auto pt-6 border-t border-zinc-100 space-y-4 bg-white">
+            {/* Status Badge */}
+            <div className="bg-zinc-50 border border-zinc-200 text-zinc-600 px-3 py-2.5 rounded-md text-xs flex items-center gap-2 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                <span>Python 環境完整</span>
+            </div>
+            
+            <p className="text-xs text-zinc-400 font-mono tracking-wide text-center">
+                VERSION 1.0.1 / DUAL ENGINE
+            </p>
+        </div>
+
       </div>
 
       {/* Main Content Mock */}

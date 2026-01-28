@@ -56,7 +56,6 @@ st.markdown("""
         color: #166534; /* Green-800 */
         padding: 0.75rem; 
         border-radius: 8px; 
-        margin-bottom: 15px; 
         border: 1px solid #bbf7d0;
         font-size: 0.9rem;
         display: flex; align-items: center; gap: 8px;
@@ -66,15 +65,22 @@ st.markdown("""
         color: #991b1b; /* Red-800 */
         padding: 0.75rem; 
         border-radius: 8px; 
-        margin-bottom: 15px; 
         border: 1px solid #fee2e2;
         font-size: 0.9rem;
     }
 
-    /* --- TEXT AREA TWEAK (Optional: Just removing the red border radius if needed, but keeping red focus) --- */
+    /* --- TEXT AREA TWEAK --- */
     .stTextArea textarea { 
         border-radius: 0.75rem !important;
         font-family: monospace !important;
+    }
+    
+    /* --- COMPACT ROW LABELS --- */
+    .row-label {
+        margin-top: 10px;
+        font-size: 14px;
+        font-weight: 500;
+        color: #3f3f46; /* Zinc-700 */
     }
     </style>
 """, unsafe_allow_html=True)
@@ -206,31 +212,38 @@ def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, s
 def main():
     with st.sidebar:
         st.title("參數設定")
-        st.caption("Version 1.0.1 / Dual Engine")
+        # 移除了這邊的環境檢測與版本資訊
         
-        if HAS_PYDUB and HAS_FFMPEG:
-            st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
-        else:
-            st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
-
         # 引擎選擇
         engine = st.radio("TTS 引擎庫", ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"])
+        st.markdown("---")
 
         # 根據選擇顯示不同參數
         if "Edge" in engine:
             st.markdown("### 1. 語音")
-            category = st.selectbox("語言區域", list(VOICES_EDGE.keys()))
-            selected_voice = st.selectbox("角色選擇", list(VOICES_EDGE[category].keys()), format_func=lambda x: VOICES_EDGE[category][x])
+            
+            # 使用 Columns 製作緊湊排版 (左標籤, 右選單)
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">語言區域</div>', unsafe_allow_html=True)
+            with c2: category = st.selectbox("語言區域", list(VOICES_EDGE.keys()), label_visibility="collapsed")
+            
+            c3, c4 = st.columns([1, 2])
+            with c3: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
+            with c4: selected_voice = st.selectbox("角色選擇", list(VOICES_EDGE[category].keys()), format_func=lambda x: VOICES_EDGE[category][x], label_visibility="collapsed")
 
-            st.markdown("### 2. 風格 (物理模擬)")
-            st.selectbox(
-                "情感預設", 
-                list(STYLES.keys()), 
-                format_func=lambda x: STYLES[x], 
-                index=0,
-                key="style_selection",
-                on_change=update_sliders
-            )
+            st.markdown("### 2. 風格")
+            c5, c6 = st.columns([1, 2])
+            with c5: st.markdown('<div class="row-label">情感預設</div>', unsafe_allow_html=True)
+            with c6:
+                st.selectbox(
+                    "情感預設", 
+                    list(STYLES.keys()), 
+                    format_func=lambda x: STYLES[x], 
+                    index=0,
+                    key="style_selection",
+                    on_change=update_sliders,
+                    label_visibility="collapsed"
+                )
             st.caption("透過調整語速與音調模擬情感。")
 
             st.markdown("### 3. 微調")
@@ -242,12 +255,15 @@ def main():
             st.markdown("### 1. 設定")
             st.info("Google TTS 穩定免費，但不支援語速(微調)、音調與情感調整。")
             
-            selected_lang_label = st.selectbox("語言", list(LANG_GOOGLE.keys()))
-            selected_lang_code = LANG_GOOGLE[selected_lang_label]
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">語言選擇</div>', unsafe_allow_html=True)
+            with c2: 
+                selected_lang_label = st.selectbox("語言", list(LANG_GOOGLE.keys()), label_visibility="collapsed")
+                selected_lang_code = LANG_GOOGLE[selected_lang_label]
             
             google_slow = st.checkbox("慢速模式 (Slow Mode)", value=False)
             
-            # 這些是為了兼容下方的函數調用，雖然Google用不到
+            # 兼容變數
             selected_voice = None 
             rate = 0
             pitch = 0
@@ -264,6 +280,17 @@ def main():
                 step=5,
                 help="數值越小（向左）判定越嚴格，保留更多細節；數值越大（向右）判定越寬鬆，刪除更多聲音。"
             )
+            
+        # --- 底部狀態欄 (利用 spacer 推到底部 - Streamlit 無法完美 mt-auto，但放最後面即可) ---
+        st.markdown("<br>" * 2, unsafe_allow_html=True) # 加一點間距
+        st.markdown("---")
+        
+        if HAS_PYDUB and HAS_FFMPEG:
+            st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
+        else:
+            st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
+            
+        st.caption("Version 1.0.1 / Dual Engine")
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
