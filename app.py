@@ -145,17 +145,21 @@ def update_sliders():
         st.session_state.pitch_val = STYLE_PRESETS[selected_style]["pitch"]
 
 # --- 5. 輔助功能 ---
-def trim_silence(audio_bytes):
+def trim_silence(audio_bytes, threshold=-50.0):
     if not HAS_PYDUB or not HAS_FFMPEG: return audio_bytes 
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
-        def detect_leading(sound, silence_threshold=-50.0, chunk_size=10):
+        
+        # 使用傳入的 threshold
+        def detect_leading(sound, silence_threshold=threshold, chunk_size=10):
             trim_ms = 0
             while trim_ms < len(sound) and sound[trim_ms:trim_ms+chunk_size].dBFS < silence_threshold:
                 trim_ms += chunk_size
             return trim_ms
+            
         start_trim = detect_leading(audio)
         end_trim = detect_leading(audio.reverse())
+        
         if start_trim + end_trim < len(audio):
             trimmed = audio[start_trim:len(audio)-end_trim]
             out = io.BytesIO()
@@ -165,7 +169,7 @@ def trim_silence(audio_bytes):
     return audio_bytes
 
 # --- 6. 核心生成邏輯 (多引擎) ---
-async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False):
+async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False, silence_threshold=-50.0):
     rate_str = f"{rate_val:+d}%"
     pitch_str = f"{pitch_val:+d}Hz"
     volume_str = f"{volume_val:+d}%"
@@ -185,24 +189,24 @@ async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_va
     
     final_bytes = audio_data.getvalue()
     if remove_silence:
-        final_bytes = trim_silence(final_bytes)
+        final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
-def generate_audio_stream_google(text, lang, slow=False, remove_silence=False):
+def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, silence_threshold=-50.0):
     tts = gTTS(text=text, lang=lang, slow=slow)
     fp = io.BytesIO()
     tts.write_to_fp(fp)
     final_bytes = fp.getvalue()
     
     if remove_silence:
-        final_bytes = trim_silence(final_bytes)
+        final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
         st.title("參數設定")
-        st.caption("Version 1.0 / Dual Engine")
+        st.caption("Version 1.0.1 / Dual Engine")
         
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
@@ -251,6 +255,15 @@ def main():
 
         st.markdown("---")
         remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
+        
+        silence_threshold = -50
+        if remove_silence_opt:
+            silence_threshold = st.slider(
+                "靜音判定閾值 (dB)", 
+                -80, -10, -50, 
+                step=5,
+                help="數值越小（向左）判定越嚴格，保留更多細節；數值越大（向右）判定越寬鬆，刪除更多聲音。"
+            )
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
@@ -280,10 +293,10 @@ def main():
                 try:
                     data = b""
                     if "Edge" in engine:
-                        data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt))
+                        data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
                     else:
                         # Google TTS
-                        data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt)
+                        data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                         
                     zf.writestr(f"{fname}.mp3", data)
                 except Exception as e:

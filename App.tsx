@@ -60,6 +60,7 @@ export default function StreamlitMock() {
   // Shared State
   const [text, setText] = useState("");
   const [trimSilence, setTrimSilence] = useState(true);
+  const [silenceThreshold, setSilenceThreshold] = useState(-50);
 
   useEffect(() => {
     if (EDGE_VOICES[category]) {
@@ -85,7 +86,7 @@ export default function StreamlitMock() {
                 <h2 className="text-xl font-bold flex items-center gap-2 text-zinc-900 tracking-tight">
                     參數設定
                 </h2>
-                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 1.0 / DUAL ENGINE</p>
+                <p className="text-xs text-zinc-400 mt-2 font-mono tracking-wide">VERSION 1.0.1 / DUAL ENGINE</p>
             </div>
             
             {/* Status Badge */}
@@ -255,7 +256,7 @@ export default function StreamlitMock() {
                 </div>
             )}
             
-            <div className="pt-4 border-t border-zinc-100">
+            <div className="pt-4 border-t border-zinc-100 space-y-4">
                 <label className="flex items-center gap-3 p-3 rounded-lg border border-transparent hover:bg-zinc-50 hover:border-zinc-100 transition-all cursor-pointer group">
                     <input 
                         type="checkbox" 
@@ -268,6 +269,24 @@ export default function StreamlitMock() {
                         <span className="text-[10px] text-zinc-400">自動移除音檔前後的空白片段</span>
                     </div>
                 </label>
+
+                {trimSilence && (
+                    <div className="px-3 pb-3">
+                         <div className="flex justify-between text-xs mb-2 text-zinc-600">
+                            <span className="font-medium">靜音判定閾值</span>
+                            <span className="font-mono bg-zinc-100 px-1.5 py-0.5 rounded text-[10px] text-zinc-500">{silenceThreshold}dB</span>
+                        </div>
+                        <input 
+                            type="range" min="-80" max="-10" step="5"
+                            value={silenceThreshold} 
+                            onChange={e => setSilenceThreshold(Number(e.target.value))} 
+                            className="w-full h-1.5 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
+                        />
+                        <p className="text-[10px] text-zinc-400 mt-2 leading-tight">
+                            數值越小（向左）判定越嚴格，保留更多；數值越大（向右）判定越寬鬆，刪除更多。
+                        </p>
+                    </div>
+                )}
             </div>
         </div>
       </div>
@@ -339,6 +358,12 @@ export default function StreamlitMock() {
                                 <>
                                     <span className="text-zinc-500">lang:</span> <span className="text-white">"{GOOGLE_LANGS[googleLang]}"</span><br/>
                                     <span className="text-zinc-500">slow:</span> <span className="text-white">{googleSlow ? 'true' : 'false'}</span>
+                                </>
+                            )}
+                            <br/>
+                            {trimSilence && (
+                                <>
+                                    <span className="text-zinc-500">silence_thresh:</span> <span className="text-white">"{silenceThreshold}dB"</span>
                                 </>
                             )}
                          </code>
