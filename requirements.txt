@@ -2,3 +2,5 @@ streamlit
 edge-tts>=6.1.9
 pydub
 gTTS>=2.5.1
+piper-tts>=1.2.0
+huggingface-hub>=0.20.0

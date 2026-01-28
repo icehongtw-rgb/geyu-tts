@@ -6,10 +6,14 @@ import zipfile
 import io
 import shutil
 import sys
+import os
+import wave
+from pathlib import Path
 
 # --- 1. 環境檢測 ---
 HAS_FFMPEG = False
 HAS_PYDUB = False
+HAS_PIPER = False
 
 if shutil.which("ffmpeg"):
     HAS_FFMPEG = True
@@ -20,10 +24,17 @@ try:
 except ImportError:
     HAS_PYDUB = False
 
+try:
+    from piper.voice import PiperVoice
+    from huggingface_hub import hf_hub_download
+    HAS_PIPER = True
+except ImportError:
+    HAS_PIPER = False
+
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
 
-# Clean White/Red CSS (Reverted forced Black styles for components)
+# Clean White/Red CSS
 st.markdown("""
     <style>
     /* --- GLOBAL RESET --- */
@@ -40,23 +51,19 @@ st.markdown("""
     }
     
     /* --- COMPACT SIDEBAR OVERRIDES --- */
-    /* Reduce top padding of the sidebar content */
     section[data-testid="stSidebar"] .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
     }
     
-    /* Reduce spacing between vertical blocks (the main gap driver) */
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
         gap: 0.5rem !important;
     }
     
-    /* Pull up widgets to reduce whitespace */
     .stSelectbox, .stSlider, .stRadio, .stCheckbox {
         margin-bottom: -5px !important;
     }
     
-    /* Custom Header Styling for Compactness */
     h2 {
         padding-top: 0rem !important;
         padding-bottom: 0.5rem !important;
@@ -77,20 +84,20 @@ st.markdown("""
 
     /* --- ALERTS --- */
     div[data-baseweb="notification"], div[data-testid="stAlert"] {
-        background-color: #fef2f2 !important; /* Red-50 */
-        border: 1px solid #fee2e2 !important; /* Red-100 */
-        color: #991b1b !important; /* Red-800 */
+        background-color: #fef2f2 !important;
+        border: 1px solid #fee2e2 !important;
+        color: #991b1b !important;
     }
     div[data-testid="stAlert"] svg, div[data-baseweb="notification"] svg {
-        fill: #ef4444 !important; /* Red-500 */
+        fill: #ef4444 !important;
         color: #ef4444 !important;
     }
 
     /* --- CUSTOM STATUS BADGES --- */
     .status-ok { 
-        background-color: #f0fdf4; /* Green-50 */
-        color: #166534; /* Green-800 */
-        padding: 0.5rem 0.75rem; /* Reduced padding */
+        background-color: #f0fdf4;
+        color: #166534;
+        padding: 0.5rem 0.75rem;
         border-radius: 8px; 
         border: 1px solid #bbf7d0;
         font-size: 0.85rem;
@@ -98,8 +105,8 @@ st.markdown("""
         margin-top: 1rem;
     }
     .status-err { 
-        background-color: #fef2f2; /* Red-50 */
-        color: #991b1b; /* Red-800 */
+        background-color: #fef2f2;
+        color: #991b1b;
         padding: 0.5rem 0.75rem;
         border-radius: 8px; 
         border: 1px solid #fee2e2;
@@ -107,25 +114,18 @@ st.markdown("""
         margin-top: 1rem;
     }
 
-    /* --- TEXT AREA TWEAK --- */
-    .stTextArea textarea { 
-        border-radius: 0.75rem !important;
-        font-family: monospace !important;
-    }
-    
-    /* --- COMPACT ROW LABELS --- */
     .row-label {
-        margin-top: 6px; /* Align visually with the input box next to it */
+        margin-top: 6px;
         font-size: 14px;
         font-weight: 500;
-        color: #3f3f46; /* Zinc-700 */
+        color: #3f3f46;
     }
     </style>
 """, unsafe_allow_html=True)
 
 # --- 3. 數據定義 ---
 
-# EDGE TTS 數據
+# EDGE TTS
 VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
@@ -146,14 +146,30 @@ VOICES_EDGE = {
     }
 }
 
-# GOOGLE TTS 數據
+# GOOGLE TTS
 LANG_GOOGLE = {
     "簡體中文 (zh-cn)": "zh-cn",
     "繁體中文 (zh-tw)": "zh-tw",
     "英文 (en)": "en"
 }
 
-# 風格預設 (僅 Edge 有效)
+# PIPER TTS CONFIG
+PIPER_MODELS = {
+    "zh_CN-huayan-medium": {
+        "name": "🇨🇳 Huayan (華顏 - 自然女聲) 🔥",
+        "repo": "rhasspy/piper-voices",
+        "file_onnx": "zh_CN/zh_CN-huayan-medium/zh_CN-huayan-medium.onnx",
+        "file_json": "zh_CN/zh_CN-huayan-medium/zh_CN-huayan-medium.onnx.json"
+    },
+    "zh_CN-xiaou-medium": {
+        "name": "🇨🇳 Xiaou (小優 - 溫柔女聲)",
+        "repo": "rhasspy/piper-voices",
+        "file_onnx": "zh_CN/zh_CN-xiaou-medium/zh_CN-xiaou-medium.onnx",
+        "file_json": "zh_CN/zh_CN-xiaou-medium/zh_CN-xiaou-medium.onnx.json"
+    }
+}
+
+# EDGE STYLES
 STYLE_PRESETS = {
     "general":      {"rate": 0,   "pitch": 0},
     "affectionate": {"rate": -25, "pitch": -5},
@@ -176,11 +192,9 @@ STYLES = {
     "shouting": "📢 大喊",
 }
 
-# --- 4. Session State 初始化 ---
-if 'rate_val' not in st.session_state:
-    st.session_state['rate_val'] = 0
-if 'pitch_val' not in st.session_state:
-    st.session_state['pitch_val'] = 0
+# --- 4. Session State ---
+if 'rate_val' not in st.session_state: st.session_state['rate_val'] = 0
+if 'pitch_val' not in st.session_state: st.session_state['pitch_val'] = 0
 
 def update_sliders():
     selected_style = st.session_state.style_selection
@@ -189,21 +203,17 @@ def update_sliders():
         st.session_state.pitch_val = STYLE_PRESETS[selected_style]["pitch"]
 
 # --- 5. 輔助功能 ---
-def trim_silence(audio_bytes, threshold=-50.0):
+def trim_silence(audio_bytes, threshold=-70.0):
     if not HAS_PYDUB or not HAS_FFMPEG: return audio_bytes 
     try:
         audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
-        
-        # 使用傳入的 threshold
         def detect_leading(sound, silence_threshold=threshold, chunk_size=10):
             trim_ms = 0
             while trim_ms < len(sound) and sound[trim_ms:trim_ms+chunk_size].dBFS < silence_threshold:
                 trim_ms += chunk_size
             return trim_ms
-            
         start_trim = detect_leading(audio)
         end_trim = detect_leading(audio.reverse())
-        
         if start_trim + end_trim < len(audio):
             trimmed = audio[start_trim:len(audio)-end_trim]
             out = io.BytesIO()
@@ -212,54 +222,164 @@ def trim_silence(audio_bytes, threshold=-50.0):
     except: pass 
     return audio_bytes
 
-# --- 6. 核心生成邏輯 (多引擎) ---
-async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False, silence_threshold=-50.0):
+def adjust_pitch_ffmpeg(audio_bytes, n_semitones):
+    """使用 pydub/ffmpeg 調整音調 (Post-processing)"""
+    if not HAS_PYDUB or not HAS_FFMPEG or n_semitones == 0:
+        return audio_bytes
+    try:
+        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
+        # 簡單變調算法 (改變採樣率) - 會有"花栗鼠"效應 (Chipmunk effect) 但最穩定
+        # 如果需要保持時長的變調，需要更復雜的 DSP
+        new_sample_rate = int(audio.frame_rate * (2.0 ** (n_semitones / 12.0)))
+        pitched = audio._spawn(audio.raw_data, overrides={'frame_rate': new_sample_rate})
+        pitched = pitched.set_frame_rate(audio.frame_rate)
+        
+        out = io.BytesIO()
+        pitched.export(out, format="mp3")
+        return out.getvalue()
+    except:
+        return audio_bytes
+
+# --- 6. Piper 模型管理 ---
+MODELS_DIR = Path("piper_models")
+MODELS_DIR.mkdir(exist_ok=True)
+
+def get_piper_model_path(model_key):
+    """確保模型存在，若無則下載"""
+    if not HAS_PIPER: return None, None
+    
+    config = PIPER_MODELS[model_key]
+    onnx_path = MODELS_DIR / f"{model_key}.onnx"
+    json_path = MODELS_DIR / f"{model_key}.onnx.json"
+    
+    if not onnx_path.exists() or not json_path.exists():
+        with st.spinner(f"正在下載 Piper 模型 {config['name']} (首次運行需時較長)..."):
+            try:
+                # 下載 ONNX
+                downloaded_onnx = hf_hub_download(
+                    repo_id=config["repo"],
+                    filename=config["file_onnx"],
+                    local_dir=MODELS_DIR
+                )
+                # 移動並重命名以確保路徑一致
+                shutil.move(downloaded_onnx, onnx_path)
+                
+                # 下載 JSON
+                downloaded_json = hf_hub_download(
+                    repo_id=config["repo"],
+                    filename=config["file_json"],
+                    local_dir=MODELS_DIR
+                )
+                shutil.move(downloaded_json, json_path)
+            except Exception as e:
+                st.error(f"模型下載失敗: {e}")
+                return None, None
+
+    return str(onnx_path), str(json_path)
+
+# --- 7. 生成邏輯 ---
+async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False, silence_threshold=-70.0):
     rate_str = f"{rate_val:+d}%"
     pitch_str = f"{pitch_val:+d}Hz"
     volume_str = f"{volume_val:+d}%"
-    
-    communicate = edge_tts.Communicate(
-        text, 
-        voice, 
-        rate=rate_str, 
-        volume=volume_str, 
-        pitch=pitch_str
-    )
-
+    communicate = edge_tts.Communicate(text, voice, rate=rate_str, volume=volume_str, pitch=pitch_str)
     audio_data = io.BytesIO()
     async for chunk in communicate.stream():
         if chunk["type"] == "audio":
             audio_data.write(chunk["data"])
-    
     final_bytes = audio_data.getvalue()
     if remove_silence:
         final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
-def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, silence_threshold=-50.0):
+def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, silence_threshold=-70.0):
     tts = gTTS(text=text, lang=lang, slow=slow)
     fp = io.BytesIO()
     tts.write_to_fp(fp)
     final_bytes = fp.getvalue()
-    
     if remove_silence:
         final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
+def generate_audio_stream_piper(text, model_key, speed_slider, noise_scale, pitch_semitones, remove_silence=False, silence_threshold=-70.0):
+    """
+    speed_slider: -100 (Slow) to 100 (Fast).
+    Piper length_scale: >1 Slow, <1 Fast. Default 1.0.
+    """
+    if not HAS_PIPER: return b""
+    
+    onnx_path, json_path = get_piper_model_path(model_key)
+    if not onnx_path: return b""
+
+    # Map Slider (-100 to 100) to Piper Length Scale (0.5 to 2.0 approx)
+    # Slider 0 = 1.0
+    # Slider 100 (Fast) = 0.6 (Short duration)
+    # Slider -100 (Slow) = 1.5 (Long duration)
+    if speed_slider >= 0:
+        # Fast: 1.0 -> 0.6
+        length_scale = 1.0 - (speed_slider / 250.0) 
+    else:
+        # Slow: 1.0 -> 1.5
+        length_scale = 1.0 + (abs(speed_slider) / 200.0)
+
+    try:
+        voice = PiperVoice.load(onnx_path, config_path=json_path)
+        
+        # Piper outputs raw 16-bit 22050Hz PCM usually
+        wav_io = io.BytesIO()
+        with wave.open(wav_io, "wb") as wav_file:
+            voice.synthesize(text, wav_file, length_scale=length_scale, noise_scale=noise_scale)
+        
+        # Convert Wav to MP3 using PyDub
+        wav_io.seek(0)
+        audio = AudioSegment.from_wav(wav_io)
+        
+        # Apply Pitch Shift (Post-processing)
+        if pitch_semitones != 0:
+             # Using the adjust function defined earlier (simple resampling)
+             new_sample_rate = int(audio.frame_rate * (2.0 ** (pitch_semitones / 12.0)))
+             audio = audio._spawn(audio.raw_data, overrides={'frame_rate': new_sample_rate})
+             audio = audio.set_frame_rate(22050) # Reset to standard
+
+        out_mp3 = io.BytesIO()
+        audio.export(out_mp3, format="mp3")
+        final_bytes = out_mp3.getvalue()
+        
+        if remove_silence:
+            final_bytes = trim_silence(final_bytes, silence_threshold)
+        return final_bytes
+
+    except Exception as e:
+        print(f"Piper Error: {e}")
+        return b""
+
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
-        # 使用自定義標題取代 st.title 以節省空間
         st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine = st.radio("TTS 引擎庫", ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"], label_visibility="collapsed")
+        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"]
+        if HAS_PIPER and HAS_FFMPEG:
+             engine_options.append("Piper TTS (本地/快速)")
         
-        # 根據選擇顯示不同參數
+        engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
+        
+        # 參數變數初始化
+        selected_voice = None
+        selected_lang_code = None
+        google_slow = False
+        rate = 0
+        pitch = 0
+        volume = 0
+        
+        # Piper specific
+        piper_model = None
+        piper_noise = 0.667
+        
+        # --- EDGE TTS UI ---
         if "Edge" in engine:
             st.markdown("### 1. 語音")
-            
-            # 使用 Columns 製作緊湊排版 (左標籤, 右選單)
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown('<div class="row-label">語言區域</div>', unsafe_allow_html=True)
             with c2: category = st.selectbox("語言區域", list(VOICES_EDGE.keys()), label_visibility="collapsed")
@@ -272,17 +392,7 @@ def main():
             c5, c6 = st.columns([1, 2])
             with c5: st.markdown('<div class="row-label">情感預設</div>', unsafe_allow_html=True)
             with c6:
-                st.selectbox(
-                    "情感預設", 
-                    list(STYLES.keys()), 
-                    format_func=lambda x: STYLES[x], 
-                    index=0,
-                    key="style_selection",
-                    on_change=update_sliders,
-                    label_visibility="collapsed"
-                )
-            
-            # 使用 markdown 取代 st.caption 節省間距
+                st.selectbox("情感預設", list(STYLES.keys()), format_func=lambda x: STYLES[x], index=0, key="style_selection", on_change=update_sliders, label_visibility="collapsed")
             st.markdown("<div style='font-size: 12px; color: #71717a; margin-top: -5px;'>透過調整語速與音調模擬情感。</div>", unsafe_allow_html=True)
 
             st.markdown("### 3. 微調")
@@ -290,42 +400,48 @@ def main():
             pitch = st.slider("音調 (Pitch)", -100, 100, key="pitch_val", format="%dHz")
             volume = st.slider("音量 (Volume)", -100, 100, 0, format="%d%%")
 
-        else: # Google TTS
+        # --- GOOGLE TTS UI ---
+        elif "Google" in engine:
             st.markdown("### 1. 設定")
             st.info("Google TTS 穩定免費，但不支援語速(微調)、音調與情感調整。")
-            
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown('<div class="row-label">語言選擇</div>', unsafe_allow_html=True)
             with c2: 
                 selected_lang_label = st.selectbox("語言", list(LANG_GOOGLE.keys()), label_visibility="collapsed")
                 selected_lang_code = LANG_GOOGLE[selected_lang_label]
-            
             google_slow = st.checkbox("慢速模式 (Slow Mode)", value=False)
+
+        # --- PIPER TTS UI ---
+        elif "Piper" in engine:
+            st.markdown("### 1. 模型")
+            st.info("Piper 為本地離線生成，速度極快。首次使用需下載模型。")
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">模型選擇</div>', unsafe_allow_html=True)
+            with c2: 
+                piper_model = st.selectbox("模型", list(PIPER_MODELS.keys()), format_func=lambda x: PIPER_MODELS[x]['name'], label_visibility="collapsed")
             
-            # 兼容變數
-            selected_voice = None 
-            rate = 0
-            pitch = 0
-            volume = 0
+            st.markdown("### 2. 參數")
+            # Reuse 'rate' variable for Piper Speed mapping
+            rate = st.slider("語速 (Speed)", -100, 100, 0, format="%d%%", help="控制發音長度 (Length Scale)")
+            # Reuse 'pitch' variable for Semitones
+            pitch = st.slider("音調 (Pitch)", -12, 12, 0, format="%d", help="後處理變調 (Semitones)。注意：會改變音色。")
+            piper_noise = st.slider("語氣變化 (Noise)", 0.1, 1.0, 0.667, step=0.01, help="控制語音的隨機變化程度 (Noise Scale)")
 
         st.markdown("---")
         remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
-        
-        silence_threshold = -50
+        silence_threshold = -70
         if remove_silence_opt:
-            silence_threshold = st.slider(
-                "靜音判定閾值 (dB)", 
-                -80, -10, -50, 
-                step=5
-            )
+            silence_threshold = st.slider("靜音判定閾值 (dB)", -80, -10, -70, step=5)
         
-        # 移除 <br>，改用 spacer 容器推到底部 (簡單說就是放最後面)
+        # Status Bar
         if HAS_PYDUB and HAS_FFMPEG:
-            st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
+            status_html = '<div class="status-ok"><span>●</span> 環境完整'
+            if HAS_PIPER: status_html += ' (+Piper)'
+            status_html += '</div>'
+            st.markdown(status_html, unsafe_allow_html=True)
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
-            
-        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.0.1 / DUAL ENGINE</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / TRI-ENGINE</div>", unsafe_allow_html=True)
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
@@ -356,9 +472,11 @@ def main():
                     data = b""
                     if "Edge" in engine:
                         data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
-                    else:
-                        # Google TTS
+                    elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
+                    elif "Piper" in engine:
+                        # Rate passed as slider value (-100 to 100), Pitch as semitones (-12 to 12)
+                        data = generate_audio_stream_piper(txt, piper_model, rate, piper_noise, pitch, remove_silence_opt, silence_threshold)
                         
                     zf.writestr(f"{fname}.mp3", data)
                 except Exception as e:
