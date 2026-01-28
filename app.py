@@ -38,6 +38,42 @@ st.markdown("""
         background-color: #fafafa;
         border-right: 1px solid #f4f4f5;
     }
+    
+    /* --- COMPACT SIDEBAR OVERRIDES --- */
+    /* Reduce top padding of the sidebar content */
+    section[data-testid="stSidebar"] .block-container {
+        padding-top: 2rem;
+        padding-bottom: 2rem;
+    }
+    
+    /* Reduce spacing between vertical blocks (the main gap driver) */
+    [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
+        gap: 0.5rem !important;
+    }
+    
+    /* Pull up widgets to reduce whitespace */
+    .stSelectbox, .stSlider, .stRadio, .stCheckbox {
+        margin-bottom: -5px !important;
+    }
+    
+    /* Custom Header Styling for Compactness */
+    h2 {
+        padding-top: 0rem !important;
+        padding-bottom: 0.5rem !important;
+        font-size: 1.5rem !important;
+        margin-bottom: 0 !important;
+    }
+    
+    h3 {
+        padding-top: 0.5rem !important;
+        padding-bottom: 0rem !important;
+        font-size: 1rem !important;
+        margin-bottom: 0 !important;
+    }
+    
+    hr {
+        margin: 0.5rem 0 !important;
+    }
 
     /* --- ALERTS --- */
     div[data-baseweb="notification"], div[data-testid="stAlert"] {
@@ -54,19 +90,21 @@ st.markdown("""
     .status-ok { 
         background-color: #f0fdf4; /* Green-50 */
         color: #166534; /* Green-800 */
-        padding: 0.75rem; 
+        padding: 0.5rem 0.75rem; /* Reduced padding */
         border-radius: 8px; 
         border: 1px solid #bbf7d0;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
         display: flex; align-items: center; gap: 8px;
+        margin-top: 1rem;
     }
     .status-err { 
         background-color: #fef2f2; /* Red-50 */
         color: #991b1b; /* Red-800 */
-        padding: 0.75rem; 
+        padding: 0.5rem 0.75rem;
         border-radius: 8px; 
         border: 1px solid #fee2e2;
-        font-size: 0.9rem;
+        font-size: 0.85rem;
+        margin-top: 1rem;
     }
 
     /* --- TEXT AREA TWEAK --- */
@@ -77,7 +115,7 @@ st.markdown("""
     
     /* --- COMPACT ROW LABELS --- */
     .row-label {
-        margin-top: 10px;
+        margin-top: 6px; /* Align visually with the input box next to it */
         font-size: 14px;
         font-weight: 500;
         color: #3f3f46; /* Zinc-700 */
@@ -211,13 +249,12 @@ def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, s
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
-        st.title("參數設定")
-        # 移除了這邊的環境檢測與版本資訊
+        # 使用自定義標題取代 st.title 以節省空間
+        st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine = st.radio("TTS 引擎庫", ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"])
-        st.markdown("---")
-
+        engine = st.radio("TTS 引擎庫", ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"], label_visibility="collapsed")
+        
         # 根據選擇顯示不同參數
         if "Edge" in engine:
             st.markdown("### 1. 語音")
@@ -244,7 +281,9 @@ def main():
                     on_change=update_sliders,
                     label_visibility="collapsed"
                 )
-            st.caption("透過調整語速與音調模擬情感。")
+            
+            # 使用 markdown 取代 st.caption 節省間距
+            st.markdown("<div style='font-size: 12px; color: #71717a; margin-top: -5px;'>透過調整語速與音調模擬情感。</div>", unsafe_allow_html=True)
 
             st.markdown("### 3. 微調")
             rate = st.slider("語速 (Rate)", -100, 100, key="rate_val", format="%d%%")
@@ -277,20 +316,16 @@ def main():
             silence_threshold = st.slider(
                 "靜音判定閾值 (dB)", 
                 -80, -10, -50, 
-                step=5,
-                help="數值越小（向左）判定越嚴格，保留更多細節；數值越大（向右）判定越寬鬆，刪除更多聲音。"
+                step=5
             )
-            
-        # --- 底部狀態欄 (利用 spacer 推到底部 - Streamlit 無法完美 mt-auto，但放最後面即可) ---
-        st.markdown("<br>" * 2, unsafe_allow_html=True) # 加一點間距
-        st.markdown("---")
         
+        # 移除 <br>，改用 spacer 容器推到底部 (簡單說就是放最後面)
         if HAS_PYDUB and HAS_FFMPEG:
             st.markdown('<div class="status-ok"><span>●</span> Python 環境完整</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
             
-        st.caption("Version 1.0.1 / Dual Engine")
+        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.0.1 / DUAL ENGINE</div>", unsafe_allow_html=True)
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
