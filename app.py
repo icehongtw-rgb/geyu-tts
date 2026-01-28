@@ -8,6 +8,7 @@ import shutil
 import sys
 import os
 import wave
+import requests
 from pathlib import Path
 
 # --- 1. 環境檢測 ---
@@ -26,7 +27,6 @@ except ImportError:
 
 try:
     from piper.voice import PiperVoice
-    from huggingface_hub import hf_hub_download
     HAS_PIPER = True
 except ImportError:
     HAS_PIPER = False
@@ -244,6 +244,20 @@ def adjust_pitch_ffmpeg(audio_bytes, n_semitones):
 MODELS_DIR = Path("piper_models")
 MODELS_DIR.mkdir(exist_ok=True)
 
+def download_file(url, local_path):
+    """直接使用 requests 下載文件，避免 huggingface_hub 的認證問題"""
+    try:
+        with requests.get(url, stream=True) as r:
+            r.raise_for_status()
+            with open(local_path, 'wb') as f:
+                for chunk in r.iter_content(chunk_size=8192):
+                    f.write(chunk)
+        return True
+    except Exception as e:
+        if os.path.exists(local_path):
+            os.remove(local_path) # 清理失敗的文件
+        raise e
+
 def get_piper_model_path(model_key):
     """確保模型存在，若無則下載"""
     if not HAS_PIPER: return None, None
@@ -255,25 +269,16 @@ def get_piper_model_path(model_key):
     if not onnx_path.exists() or not json_path.exists():
         with st.spinner(f"正在下載 Piper 模型 {config['name']} (首次運行需時較長)..."):
             try:
-                # IMPORTANT: repo_type="dataset" is required for rhasspy/piper-voices
-                # 下載 ONNX
-                downloaded_onnx = hf_hub_download(
-                    repo_id=config["repo"],
-                    filename=config["file_onnx"],
-                    repo_type="dataset", 
-                    local_dir=MODELS_DIR
-                )
-                # 移動並重命名以確保路徑一致
-                shutil.move(downloaded_onnx, onnx_path)
+                # 構建直接下載 URL
+                # 格式: https://huggingface.co/datasets/{repo_id}/resolve/main/{path}
+                base_url = f"https://huggingface.co/datasets/{config['repo']}/resolve/main"
                 
-                # 下載 JSON
-                downloaded_json = hf_hub_download(
-                    repo_id=config["repo"],
-                    filename=config["file_json"],
-                    repo_type="dataset",
-                    local_dir=MODELS_DIR
-                )
-                shutil.move(downloaded_json, json_path)
+                url_onnx = f"{base_url}/{config['file_onnx']}"
+                url_json = f"{base_url}/{config['file_json']}"
+                
+                download_file(url_onnx, onnx_path)
+                download_file(url_json, json_path)
+                
             except Exception as e:
                 st.error(f"模型下載失敗: {e}")
                 return None, None
