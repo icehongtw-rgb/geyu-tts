@@ -255,10 +255,12 @@ def get_piper_model_path(model_key):
     if not onnx_path.exists() or not json_path.exists():
         with st.spinner(f"正在下載 Piper 模型 {config['name']} (首次運行需時較長)..."):
             try:
+                # IMPORTANT: repo_type="dataset" is required for rhasspy/piper-voices
                 # 下載 ONNX
                 downloaded_onnx = hf_hub_download(
                     repo_id=config["repo"],
                     filename=config["file_onnx"],
+                    repo_type="dataset", 
                     local_dir=MODELS_DIR
                 )
                 # 移動並重命名以確保路徑一致
@@ -268,6 +270,7 @@ def get_piper_model_path(model_key):
                 downloaded_json = hf_hub_download(
                     repo_id=config["repo"],
                     filename=config["file_json"],
+                    repo_type="dataset",
                     local_dir=MODELS_DIR
                 )
                 shutil.move(downloaded_json, json_path)
