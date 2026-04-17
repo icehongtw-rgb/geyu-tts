@@ -426,20 +426,37 @@ def main():
                     data = b""
                     if "Edge" in engine:
                         data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
+                        zf.writestr(f"{fname}.mp3", data)
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
+                        zf.writestr(f"{fname}.mp3", data)
                     elif "Gemini" in engine:
-                        full_txt = GEMINI_PROMPTS[gemini_vibe] + txt if gemini_vibe != "none" else txt
+                        # Gemini TTS preview can sometimes hallucinate or add conversational meta-text
+                        # We need to strictly instruct it to ONLY read the content.
+                        vibe_prompt = GEMINI_PROMPTS[gemini_vibe] if gemini_vibe != "none" else ""
+                        full_txt = f"{vibe_prompt}\n\n[請勿添加任何解釋或對話，直接朗讀以下內容：]\n{txt}"
                         result = generate_audio_stream_gemini(full_txt, gemini_voice)
                         if isinstance(result, dict) and "error" in result:
                             st.error(f"檔案 {fname} 失敗: {result['error']}")
                             continue
                         data = result
                         
-                    if not data or len(data) < 100: # 檢查是否為空
-                         st.warning(f"注意：{fname} 的音訊內容異常過短（{len(data)} bytes）")
+                        ext = ".wav"
+                        if HAS_PYDUB and HAS_FFMPEG:
+                            try:
+                                audio = AudioSegment.from_wav(io.BytesIO(data))
+                                out = io.BytesIO()
+                                audio.export(out, format="mp3", bitrate="192k")
+                                data = out.getvalue()
+                                ext = ".mp3"
+                            except Exception as e:
+                                print(f"MP3 Conversion failed: {e}")
                         
-                    zf.writestr(f"{fname}.wav" if "Gemini" in engine else f"{fname}.mp3", data)
+                        if not data or len(data) < 100: # 檢查是否為空
+                             st.warning(f"注意：{fname} 的音訊內容異常過短（{len(data)} bytes）")
+                             
+                        zf.writestr(f"{fname}{ext}", data)
+                        
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
