@@ -34,6 +34,13 @@ const GOOGLE_LANGS: Record<string, string> = {
     "英文 (en)": "en"
 };
 
+const GEMINI_PROMPTS: Record<string, string> = {
+    "none": "",
+    "game": "用充滿活力、興奮且鼓勵的語氣對小朋友說：",
+    "card": "以標準、清晰且溫柔的發音方式，像百科全書一樣朗讀：",
+    "story": "用溫柔、親切且像是在講故事的口吻，慢慢地說：",
+};
+
 const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string }> = {
     "general":      { rate: 0,   pitch: 0,   label: "預設 (General)" },
     "affectionate": { rate: -25, pitch: -5,  label: "❤️ 親切/哄孩子" },
@@ -62,6 +69,7 @@ export default function StreamlitMock() {
 
   // Gemini State
   const [geminiVoice, setGeminiVoice] = useState<'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr'>('Kore');
+  const [geminiPromptKey, setGeminiPromptKey] = useState<string>("none");
 
   // Shared State
   const [text, setText] = useState("");
@@ -157,8 +165,9 @@ export default function StreamlitMock() {
         }
 
         if (engine === 'gemini') {
+          const fullText = geminiPromptKey !== 'none' ? `${GEMINI_PROMPTS[geminiPromptKey]}${content}` : content;
           const base64 = await generateGeminiSpeech({
-            text: content,
+            text: fullText,
             voice: geminiVoice
           });
           
@@ -371,7 +380,8 @@ export default function StreamlitMock() {
                 <div className="space-y-4 pt-3 border-t border-zinc-100">
                      <div className="bg-red-50 border border-red-100 rounded-md p-2 text-xs text-red-800 leading-relaxed shadow-sm">
                         <span className="font-bold block mb-1">New! Gemini 3.1 TTS</span>
-                        支持 70+ 語言的多模態音素驅動語音。具備更高的自然度與表現力。
+                        <p>支援 70+ 語言。目前提供 5 種核心音色。</p>
+                        <p className="mt-1 font-medium text-red-600">💡 提示：在文字前加上「用傷心的語氣說：」等指令，AI 會自動調整情感！</p>
                     </div>
 
                     <div className="flex items-center justify-between gap-3">
@@ -381,11 +391,25 @@ export default function StreamlitMock() {
                             onChange={(e) => setGeminiVoice(e.target.value as any)}
                             className="flex-1 p-1.5 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
                         >
-                            <option value="Kore">Kore (Balanced)</option>
-                            <option value="Puck">Puck (Energetic)</option>
-                            <option value="Charon">Charon (Deep/Calm)</option>
-                            <option value="Fenrir">Fenrir (Mysterious)</option>
-                            <option value="Zephyr">Zephyr (Bright)</option>
+                            <option value="Kore">👩 Kore (女聲 - 平衡專業/推薦) ✨</option>
+                            <option value="Puck">👧 Puck (女聲 - 活力稚嫩)</option>
+                            <option value="Charon">👨 Charon (男聲 - 沉穩冷靜)</option>
+                            <option value="Fenrir">🧔 Fenrir (男聲 - 神秘低沉)</option>
+                            <option value="Zephyr">👩 Zephyr (女聲 - 明亮輕快)</option>
+                        </select>
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                        <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">場景語氣</label>
+                        <select 
+                            value={geminiPromptKey}
+                            onChange={(e) => setGeminiPromptKey(e.target.value)}
+                            className="flex-1 p-1.5 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
+                        >
+                            <option value="none">預設內容 (無指令)</option>
+                            <option value="game">🎮 遊戲玩法 (充滿活力)</option>
+                            <option value="card">📚 專業圖卡 (清晰播音)</option>
+                            <option value="story">📖 親切故事 (溫柔緩慢)</option>
                         </select>
                     </div>
                 </div>
@@ -504,6 +528,7 @@ export default function StreamlitMock() {
                                 <>
                                     <span className="text-zinc-500">api:</span> <span className="text-white">"gemini-3.1-flash"</span><br/>
                                     <span className="text-zinc-500">voice:</span> <span className="text-white">"{geminiVoice}"</span><br/>
+                                    <span className="text-zinc-500">vibe:</span> <span className="text-white">"{geminiPromptKey !== 'none' ? geminiPromptKey : 'default'}"</span><br/>
                                     <span className="text-zinc-500">multimodal:</span> <span className="text-white">true</span>
                                 </>
                             ) : (

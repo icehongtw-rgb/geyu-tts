@@ -149,11 +149,18 @@ LANG_GOOGLE = {
 
 # GEMINI TTS CONFIG
 VOICES_GEMINI = {
-    "Kore": "Kore (Balanced - 平衡推薦)",
-    "Puck": "Puck (Energetic - 活力)",
-    "Charon": "Charon (Deep/Calm - 深沉)",
-    "Fenrir": "Fenrir (Mysterious - 神秘)",
-    "Zephyr": "Zephyr (Bright - 明亮)"
+    "Kore": "👩 Kore (女聲 - 平衡專業/推薦) ✨",
+    "Puck": "👧 Puck (女聲 - 活力稚嫩)",
+    "Charon": "👨 Charon (男聲 - 沉穩冷靜)",
+    "Fenrir": "🧔 Fenrir (男聲 - 神秘低沉)",
+    "Zephyr": "👩 Zephyr (女聲 - 明亮輕快)"
+}
+
+GEMINI_PROMPTS = {
+    "none": "",
+    "game": "用充滿活力、興奮且鼓勵的語氣對小朋友說：",
+    "card": "以標準、清晰且溫柔的發音方式，像百科全書一樣朗讀：",
+    "story": "用溫柔、親切且像是在講故事的口吻，慢慢地說：",
 }
 
 # EDGE STYLES
@@ -342,11 +349,21 @@ def main():
         # --- GEMINI TTS UI ---
         elif "Gemini" in engine:
             st.markdown("### 1. 語音")
-            st.success("New! Gemini 3.1 Flash TTS 現已推出。支援 70+ 語言的多模態生成。")
+            st.success("New! Gemini 3.1 Flash TTS。目前提供 5 種核心音色。")
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
             with c2: 
                 gemini_voice = st.selectbox("角色", list(VOICES_GEMINI.keys()), format_func=lambda x: VOICES_GEMINI[x], label_visibility="collapsed")
+            
+            c3, c4 = st.columns([1, 2])
+            with c3: st.markdown('<div class="row-label">場景語氣</div>', unsafe_allow_html=True)
+            with c4:
+                gemini_vibe = st.selectbox("場景", list(GEMINI_PROMPTS.keys()), format_func=lambda x: {
+                    "none": "預設內容 (無指令)",
+                    "game": "🎮 遊戲玩法 (充滿活力)",
+                    "card": "📚 專業圖卡 (清晰播音)",
+                    "story": "📖 親切故事 (溫柔緩慢)"
+                }[x], label_visibility="collapsed")
 
         st.markdown("---")
         remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
@@ -393,7 +410,8 @@ def main():
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                     elif "Gemini" in engine:
-                        data = generate_audio_stream_gemini(txt, gemini_voice)
+                        full_txt = GEMINI_PROMPTS[gemini_vibe] + txt if gemini_vibe != "none" else txt
+                        data = generate_audio_stream_gemini(full_txt, gemini_voice)
                         
                     zf.writestr(f"{fname}.wav" if "Gemini" in engine else f"{fname}.mp3", data)
                 except Exception as e:
