@@ -9,6 +9,7 @@ import sys
 import os
 import wave
 import requests
+import time
 import google.generativeai as genai
 from pathlib import Path
 
@@ -431,13 +432,20 @@ def main():
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                         zf.writestr(f"{fname}.mp3", data)
                     elif "Gemini" in engine:
+                        # Add a small delay between requests to avoid free tier rate limit
+                        if i > 0:
+                            time.sleep(2)
                         # Gemini TTS preview can sometimes hallucinate or add conversational meta-text
                         # We need to strictly instruct it to ONLY read the content.
                         vibe_prompt = GEMINI_PROMPTS[gemini_vibe] if gemini_vibe != "none" else ""
                         full_txt = f"{vibe_prompt}\n\n[請勿添加任何解釋或對話，直接朗讀以下內容：]\n{txt}"
                         result = generate_audio_stream_gemini(full_txt, gemini_voice)
                         if isinstance(result, dict) and "error" in result:
-                            st.error(f"檔案 {fname} 失敗: {result['error']}")
+                            err_msg = result['error']
+                            if "429" in err_msg or "quota" in err_msg.lower():
+                                st.error(f"檔案 {fname} 失敗: 請求太頻繁，觸發了免費版 API 的限制 (429 Quota Exceeded)。請等待約一分鐘後再試。")
+                            else:
+                                st.error(f"檔案 {fname} 失敗: {err_msg}")
                             continue
                         data = result
                         
