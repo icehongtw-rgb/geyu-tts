@@ -262,31 +262,36 @@ def generate_audio_stream_gemini(text, voice_name):
     使用 Gemini 3.1 Flash TTS 生成音頻
     Gemini 返回的是原始 PCM 16-bit 24kHz 數據
     """
-    if not get_gemini_client():
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        print("Error: GEMINI_API_KEY not found in environment")
         return b""
     
     try:
-        model = genai.GenerativeModel("gemini-3.1-flash-tts-preview")
+        genai.configure(api_key=api_key)
+        model = genai.GenerativeModel("models/gemini-3.1-flash-tts-preview")
         response = model.generate_content(
             text,
-            generation_config=genai.types.GenerationConfig(
-                response_modalities=["AUDIO"],
-                speech_config=genai.types.SpeechConfig(
-                    voice_config=genai.types.VoiceConfig(
-                        prebuilt_voice_config=genai.types.PrebuiltVoiceConfig(
-                            voice_name=voice_name
-                        )
-                    )
-                )
-            )
+            generation_config={
+                "response_modalities": ["AUDIO"],
+                "speech_config": {
+                    "voice_config": {
+                        "prebuilt_voice_config": {
+                            "voice_name": voice_name
+                        }
+                    }
+                }
+            }
         )
-        audio_part = response.candidates[0].content.parts[0]
-        if hasattr(audio_part, 'inline_data'):
-            pcm_data = audio_part.inline_data.data
-        else:
-            return b""
+        
+        # Check if we have audio parts
+        for part in response.candidates[0].content.parts:
+            if hasattr(part, 'inline_data'):
+                pcm_data = part.inline_data.data
+                return wrap_wav_header(pcm_data, 24000)
             
-        return wrap_wav_header(pcm_data, 24000)
+        print("Error: No audio data found in Gemini response parts")
+        return b""
     except Exception as e:
         print(f"Gemini TTS Error: {e}")
         return b""

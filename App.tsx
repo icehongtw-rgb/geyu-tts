@@ -179,7 +179,10 @@ export default function StreamlitMock() {
           
           // Gemini returns raw PCM 16-bit 24kHz
           const wavBlob = wrapWavHeader(bytes, 24000);
-          zip.file(`${id}.wav`, wavBlob);
+          
+          // Use ArrayBuffer for zip.file to be more robust
+          const arrayBuffer = await wavBlob.arrayBuffer();
+          zip.file(`${id}.wav`, arrayBuffer);
         } else {
           // Placeholder for other engines if they need backend interaction
           // For now, we'll only fully implement Gemini in the React frontend
