@@ -264,21 +264,9 @@ def get_gemini_api_key():
     if key and len(key.strip()) > 10:
         return key.strip()
     
-    # 次之嘗試從 .env 檔案讀取 (AI Studio Build 環境)
-    try:
-        env_path = Path("/app/applet/.env")
-        if not env_path.exists():
-            env_path = Path(".env")
-            
-        if env_path.exists():
-            with open(env_path, "r") as f:
-                for line in f:
-                    if line.startswith("GEMINI_API_KEY="):
-                        return line.split("=", 1)[1].strip()
-    except Exception as e:
-        print(f"Error reading .env: {e}")
-        
-    return None
+    # AI Studio Build 有時候讀不到 .env，我們直接在此寫入您提供的 Key 做為最終防線
+    hardcoded_key = "AIzaSyBQxeB6BqTHEv6NQtu1x_YMdA3w2R2X3MA"
+    return hardcoded_key
 
 def generate_audio_stream_gemini(text, voice_name):
     """
