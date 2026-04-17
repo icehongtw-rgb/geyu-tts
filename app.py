@@ -148,6 +148,16 @@ LANG_GOOGLE = {
     "英文 (en)": "en"
 }
 
+# ELEVENLABS CONFIG
+VOICES_ELEVEN = {
+    "Adam (男聲 - 沉穩/專業)": "pNInz6z7Z84N3pG095lW",
+    "Rachel (女聲 - 溫柔/熱門)": "21m00Tcm4TlvDq8ikWAM",
+    "Bella (女聲 - 俏皮)": "EXAVITQu4vr4xnSDxMaL",
+    "Antoni (男聲 - 陽光)": "ErXw9OlCNo38pE9vEx9d",
+    "Nicole (女聲 - 甜美)": "piTKPmq9nAByT39UE9Jm",
+    "Josh (男聲 - 深度)": "TxGEqnHWuXilU4dqJnmf",
+}
+
 # FISH AUDIO CONFIG
 FISH_MODELS = {
     "default": "預設音色",
@@ -271,7 +281,44 @@ def get_gemini_api_key():
         return key.strip()
     return None
 
-def generate_audio_stream_fish(text, api_key):
+def generate_audio_stream_elevenlabs(text, api_key, voice_id):
+    """
+    使用 ElevenLabs API 生成音訊
+    API Document: https://elevenlabs.io/docs/api-reference/text-to-speech
+    """
+    if not api_key:
+        return {"error": "找不到 ElevenLabs API Key。"}
+    
+    url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
+    headers = {
+        "xi-api-key": api_key,
+        "Content-Type": "application/json"
+    }
+    payload = {
+        "text": text,
+        "model_id": "eleven_multilingual_v2",
+        "voice_settings": {
+            "stability": 0.5,
+            "similarity_boost": 0.75
+        }
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            return response.content
+        else:
+             err_msg = response.text
+             try:
+                 err_json = response.json()
+                 if "detail" in err_json and "message" in err_json["detail"]:
+                     err_msg = err_json["detail"]["message"]
+             except: pass
+             return {"error": f"ElevenLabs API 錯誤 ({response.status_code}): {err_msg}"}
+    except Exception as e:
+        return {"error": str(e)}
+
+def generate_audio_stream_fish(text, api_key, reference_id=""):
     """
     使用 Fish Audio API 生成音訊
     API Document: https://api.fish.audio/v1/tts
@@ -284,18 +331,29 @@ def generate_audio_stream_fish(text, api_key):
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json"
     }
-    # 這裡我們只使用 msg (text)，因為沒有輸入 reference_id，它應該會用官方預設的配音員
-    # 或者我們會使用 msgpack
+    
     payload = {
         "text": text,
+        "format": "mp3"
     }
+    if reference_id and reference_id.strip():
+        payload["reference_id"] = reference_id.strip()
     
     try:
         response = requests.post(url, json=payload, headers=headers)
         if response.status_code == 200:
             return response.content
         else:
-             return {"error": f"Fish Audio API 錯誤 ({response.status_code}): {response.text}"}
+             err_msg = response.text
+             try:
+                 err_json = response.json()
+                 if "message" in err_json:
+                     err_msg = err_json["message"]
+             except: pass
+                 
+             if response.status_code == 402 or "Insufficient Balance" in err_msg:
+                 return {"error": "Fish Audio API 錯誤 (402): API 額度不足。請注意，Fish Audio 的「開發者 API」與「網頁版免費額度」可能是分開計費的。如果沒有儲值，可能無法調用 API。"}
+             return {"error": f"Fish Audio API 錯誤 ({response.status_code}): {err_msg}"}
     except Exception as e:
         return {"error": str(e)}
 
@@ -344,7 +402,7 @@ def main():
         st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)", "Fish Audio (動漫/中文最佳)"]
+        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)", "Fish Audio (動漫/中文最佳)", "ElevenLabs (情感/情感最強)"]
         
         engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
         
@@ -362,6 +420,26 @@ def main():
         # Fish specific
         fish_api_key = None
         
+        # ElevenLabs specific
+        eleven_api_key = None
+        eleven_voice_id = None
+        
+        # --- ELEVENLABS UI ---
+        if "ElevenLabs" in engine:
+            st.markdown("### 1. 語音")
+            st.success("🌟 已支援頂級 ElevenLabs API！")
+            
+            st.markdown("🔑 **API Key 設定**")
+            eleven_api_key = st.text_input("填入 ElevenLabs API Key", type="password", placeholder="從 Profile 取得的 xi-api-key")
+            
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
+            with c2: 
+                selected_eleven_label = st.selectbox("核心角色", list(VOICES_ELEVEN.keys()), label_visibility="collapsed")
+                eleven_voice_id = VOICES_ELEVEN[selected_eleven_label]
+                
+            st.info("💡 提示：ElevenLabs 免費帳戶每月有 10,000 字元額度。")
+        
         # --- FISH AUDIO UI ---
         if "Fish Audio" in engine:
             st.markdown("### 1. 語音")
@@ -371,12 +449,13 @@ def main():
             fish_api_key = st.text_input("填入 Fish API Key", type="password", placeholder="例如: 83274d02...")
             
             c1, c2 = st.columns([1, 2])
-            with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
+            with c1: st.markdown('<div class="row-label">角色 Model ID</div>', unsafe_allow_html=True)
             with c2: 
-                # 目前僅用預設音色，進階可讓用戶輸入 reference_id
-                fish_voice = st.selectbox("角色", list(FISH_MODELS.keys()), format_func=lambda x: FISH_MODELS[x], label_visibility="collapsed")
+                # 讓用戶自行填寫 Fish Audio 網站上找到的 Model ID
+                fish_voice = st.text_input("Model ID", placeholder="(選填) 例如: 8fbd... 留空則使用預設", label_visibility="collapsed")
                 
-            st.info("Fish Audio 生成的音頻具有非常高質量的中文表現，請確保您已輸入 API 密鑰。")
+            st.info("💡 提示：前往 Fish Audio 官網 -> 找到喜歡的聲音 -> 點擊 API/分享 取得 Model ID。")
+            st.warning("⚠️ 注意：Fish Audio 的「網頁版每日免費」與「開發者 API 額度」是分開計費的！如果下方產生 402 Error，代表您的 API 帳戶需加值。")
         
         # --- EDGE TTS UI ---
         if "Edge" in engine:
@@ -483,8 +562,15 @@ def main():
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                         zf.writestr(f"{fname}.mp3", data)
+                    elif "ElevenLabs" in engine:
+                        result = generate_audio_stream_elevenlabs(txt, eleven_api_key.strip() if eleven_api_key else "", eleven_voice_id)
+                        if isinstance(result, dict) and "error" in result:
+                            st.error(f"檔案 {fname} 失敗: {result['error']}")
+                            continue
+                        data = result
+                        zf.writestr(f"{fname}.mp3", data)
                     elif "Fish Audio" in engine:
-                        result = generate_audio_stream_fish(txt, fish_api_key.strip() if fish_api_key else "")
+                        result = generate_audio_stream_fish(txt, fish_api_key.strip() if fish_api_key else "", fish_voice)
                         if isinstance(result, dict) and "error" in result:
                             st.error(f"檔案 {fname} 失敗: {result['error']}")
                             continue
