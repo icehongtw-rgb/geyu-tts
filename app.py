@@ -263,10 +263,7 @@ def get_gemini_api_key():
     key = os.environ.get("GEMINI_API_KEY")
     if key and len(key.strip()) > 10:
         return key.strip()
-    
-    # AI Studio Build 有時候讀不到 .env，我們直接在此寫入您提供的 Key 做為最終防線
-    hardcoded_key = "AIzaSyBQxeB6BqTHEv6NQtu1x_YMdA3w2R2X3MA"
-    return hardcoded_key
+    return None
 
 def generate_audio_stream_gemini(text, voice_name):
     """
@@ -366,6 +363,12 @@ def main():
         elif "Gemini" in engine:
             st.markdown("### 1. 語音")
             st.success("New! Gemini 3.1 Flash TTS。目前提供 5 種核心音色。")
+            
+            st.markdown("🔑 **API Key 設定**")
+            ui_api_key = st.text_input("填入 Gemini API Key (不需存檔，貼上即用)", type="password", placeholder="AIzaSy...")
+            if ui_api_key:
+                os.environ["GEMINI_API_KEY"] = ui_api_key.strip()
+                
             c1, c2 = st.columns([1, 2])
             with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
             with c2: 
