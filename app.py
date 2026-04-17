@@ -148,6 +148,11 @@ LANG_GOOGLE = {
     "英文 (en)": "en"
 }
 
+# FISH AUDIO CONFIG
+FISH_MODELS = {
+    "default": "預設音色",
+}
+
 # GEMINI TTS CONFIG
 VOICES_GEMINI = {
     "Kore": "👩 Kore (女聲 - 平衡專業/推薦) ✨",
@@ -266,6 +271,34 @@ def get_gemini_api_key():
         return key.strip()
     return None
 
+def generate_audio_stream_fish(text, api_key):
+    """
+    使用 Fish Audio API 生成音訊
+    API Document: https://api.fish.audio/v1/tts
+    """
+    if not api_key:
+        return {"error": "找不到 Fish Audio API Key。"}
+    
+    url = "https://api.fish.audio/v1/tts"
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    # 這裡我們只使用 msg (text)，因為沒有輸入 reference_id，它應該會用官方預設的配音員
+    # 或者我們會使用 msgpack
+    payload = {
+        "text": text,
+    }
+    
+    try:
+        response = requests.post(url, json=payload, headers=headers)
+        if response.status_code == 200:
+            return response.content
+        else:
+             return {"error": f"Fish Audio API 錯誤 ({response.status_code}): {response.text}"}
+    except Exception as e:
+        return {"error": str(e)}
+
 def generate_audio_stream_gemini(text, voice_name):
     """
     使用 Gemini 3.1 Flash TTS 生成音訊
@@ -311,7 +344,7 @@ def main():
         st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)"]
+        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)", "Fish Audio (動漫/中文最佳)"]
         
         engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
         
@@ -325,6 +358,25 @@ def main():
         
         # Gemini specific
         gemini_voice = None
+        
+        # Fish specific
+        fish_api_key = None
+        
+        # --- FISH AUDIO UI ---
+        if "Fish Audio" in engine:
+            st.markdown("### 1. 語音")
+            st.success("🎉 全新支援 Fish Audio API (中文最佳推薦)！")
+            
+            st.markdown("🔑 **API Key 設定**")
+            fish_api_key = st.text_input("填入 Fish API Key", type="password", placeholder="例如: 83274d02...")
+            
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
+            with c2: 
+                # 目前僅用預設音色，進階可讓用戶輸入 reference_id
+                fish_voice = st.selectbox("角色", list(FISH_MODELS.keys()), format_func=lambda x: FISH_MODELS[x], label_visibility="collapsed")
+                
+            st.info("Fish Audio 生成的音頻具有非常高質量的中文表現，請確保您已輸入 API 密鑰。")
         
         # --- EDGE TTS UI ---
         if "Edge" in engine:
@@ -431,6 +483,13 @@ def main():
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                         zf.writestr(f"{fname}.mp3", data)
+                    elif "Fish Audio" in engine:
+                        result = generate_audio_stream_fish(txt, fish_api_key.strip() if fish_api_key else "")
+                        if isinstance(result, dict) and "error" in result:
+                            st.error(f"檔案 {fname} 失敗: {result['error']}")
+                            continue
+                        data = result
+                        zf.writestr(f"{fname}.mp3", data)  # Assuming Fish Audio returns mp3, standard API behavior
                     elif "Gemini" in engine:
                         # Add a small delay between requests to avoid free tier rate limit
                         if i > 0:
