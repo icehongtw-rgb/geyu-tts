@@ -125,10 +125,12 @@ VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
         "zh-CN-XiaonuoNeural": "🇨🇳 小諾 (女聲 - 溫柔/適合兒童) 🧸",
-        "zh-CN-XiaomengNeural": "🇨🇳 小夢 (女聲 - 聊天隨興)",
+        "zh-CN-XiaomengNeural": "🇨🇳 小夢 (女聲 - 聊天隨興/新)",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
+        "zh-CN-XiaochenNeural": "🇨🇳 曉辰 (女聲 - 標準)",
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
-        "zh-CN-YunjieNeural": "🇨🇳 雲傑 (男聲 - 情感豐富)",
+        "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
+        "zh-CN-YunzeNeural": "🇨🇳 雲澤 (男聲 - 情感豐富/新)",
         "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)",
     },
     "繁體中文 (台灣)": {
@@ -256,15 +258,36 @@ async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_va
     rate_str = f"{rate_val:+d}%"
     pitch_str = f"{pitch_val:+d}Hz"
     volume_str = f"{volume_val:+d}%"
-    communicate = edge_tts.Communicate(text, voice, rate=rate_str, volume=volume_str, pitch=pitch_str)
-    audio_data = io.BytesIO()
-    async for chunk in communicate.stream():
-        if chunk["type"] == "audio":
-            audio_data.write(chunk["data"])
-    final_bytes = audio_data.getvalue()
-    if remove_silence:
-        final_bytes = trim_silence(final_bytes, silence_threshold)
-    return final_bytes
+    
+    try:
+        communicate = edge_tts.Communicate(text, voice, rate=rate_str, volume=volume_str, pitch=pitch_str)
+        audio_data = io.BytesIO()
+        has_data = False
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_data.write(chunk["data"])
+                has_data = True
+        
+        if not has_data:
+            # 如果還是失敗，可能是這個新角色不支援微調參數，嘗試用預設參數再請求一次
+            if rate_val != 0 or pitch_val != 0 or volume_val != 0:
+                communicate = edge_tts.Communicate(text, voice)
+                audio_data = io.BytesIO()
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_data.write(chunk["data"])
+                        has_data = True
+            
+        if not has_data:
+            raise ValueError(f"語音引擎無法生成角色 {voice} 的音訊內容。請檢查角色 ID 或稍後再試。")
+            
+        final_bytes = audio_data.getvalue()
+        if remove_silence:
+            final_bytes = trim_silence(final_bytes, silence_threshold)
+        return final_bytes
+    except Exception as e:
+        # 如果徹底失敗，拋出錯誤讓主迴圈捕獲
+        raise e
 
 def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, silence_threshold=-70.0):
     tts = gTTS(text=text, lang=lang, slow=slow)
@@ -497,6 +520,21 @@ def main():
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
         st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / TRI-ENGINE</div>", unsafe_allow_html=True)
+        with st.sidebar.expander("🛠️ 語音偵錯 (新角色偵測)"):
+            if st.button("檢索當前可用微軟音色"):
+                try:
+                    import asyncio
+                    import edge_tts
+                    async def scan():
+                        mgr = await edge_tts.VoicesManager.create()
+                        return mgr.find(Locale="zh-CN")
+                    res = asyncio.run(scan())
+                    st.write(f"系統檢測到 {len(res)} 個中文音色：")
+                    for r in res:
+                        st.code(r['Name'])
+                except Exception as e:
+                    st.error(str(e))
+
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
@@ -526,8 +564,12 @@ def main():
                 try:
                     data = b""
                     if "Edge" in engine:
-                        data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
-                        zf.writestr(f"{fname}.mp3", data)
+                        try:
+                            data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
+                            zf.writestr(f"{fname}.mp3", data)
+                        except Exception as e:
+                            st.error(f"檔案 {fname} 失敗: {str(e)}")
+                            continue
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                         zf.writestr(f"{fname}.mp3", data)

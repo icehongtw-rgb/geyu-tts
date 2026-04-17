@@ -1,5 +1,5 @@
 streamlit
-edge-tts>=6.1.9
+edge-tts>=6.1.18
 pydub
 gTTS>=2.5.1
 requests
