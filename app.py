@@ -523,8 +523,6 @@ def main():
         with st.sidebar.expander("🛠️ 語音偵錯 (新角色偵測)"):
             if st.button("檢索當前可用微軟音色"):
                 try:
-                    import asyncio
-                    import edge_tts
                     async def scan():
                         mgr = await edge_tts.VoicesManager.create()
                         return mgr.find(Locale="zh-CN")
