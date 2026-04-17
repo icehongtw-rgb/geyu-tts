@@ -259,13 +259,11 @@ def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, s
 
 def generate_audio_stream_gemini(text, voice_name):
     """
-    使用 Gemini 3.1 Flash TTS 生成音頻
-    Gemini 返回的是原始 PCM 16-bit 24kHz 數據
+    使用 Gemini 3.1 Flash TTS 生成音訊
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        print("Error: GEMINI_API_KEY not found in environment")
-        return b""
+        return {"error": "找不到 GEMINI_API_KEY，請在設定中添加。"}
     
     try:
         genai.configure(api_key=api_key)
@@ -284,17 +282,19 @@ def generate_audio_stream_gemini(text, voice_name):
             }
         )
         
-        # Check if we have audio parts
+        # 遍歷所有 candidate 和 part 尋找音訊數據
+        if not response.candidates:
+             return {"error": "Gemini 未生成任何內容，請檢查輸入或 API 狀態。"}
+             
         for part in response.candidates[0].content.parts:
             if hasattr(part, 'inline_data'):
                 pcm_data = part.inline_data.data
-                return wrap_wav_header(pcm_data, 24000)
+                if pcm_data:
+                    return wrap_wav_header(pcm_data, 24000)
             
-        print("Error: No audio data found in Gemini response parts")
-        return b""
+        return {"error": "已收到 Gemini 回應，但其中不包含音訊數據。"}
     except Exception as e:
-        print(f"Gemini TTS Error: {e}")
-        return b""
+        return {"error": f"Gemini 請求失敗: {str(e)}"}
 
 # --- 7. 介面邏輯 ---
 def main():
@@ -416,7 +416,14 @@ def main():
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
                     elif "Gemini" in engine:
                         full_txt = GEMINI_PROMPTS[gemini_vibe] + txt if gemini_vibe != "none" else txt
-                        data = generate_audio_stream_gemini(full_txt, gemini_voice)
+                        result = generate_audio_stream_gemini(full_txt, gemini_voice)
+                        if isinstance(result, dict) and "error" in result:
+                            st.error(f"檔案 {fname} 失敗: {result['error']}")
+                            continue
+                        data = result
+                        
+                    if not data or len(data) < 100: # 檢查是否為空
+                         st.warning(f"注意：{fname} 的音訊內容異常過短（{len(data)} bytes）")
                         
                     zf.writestr(f"{fname}.wav" if "Gemini" in engine else f"{fname}.mp3", data)
                 except Exception as e:
