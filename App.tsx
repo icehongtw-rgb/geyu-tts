@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Info, Sliders, Scissors, Terminal, Zap, Server, HardDrive } from 'lucide-react';
+import { Info, Sliders, Scissors, Terminal, Zap, Server, HardDrive, Play, Download, Loader2, Volume2 } from 'lucide-react';
+import JSZip from 'jszip';
+import { saveAs } from 'file-saver';
+import { generateGeminiSpeech } from './services/geminiService';
 
 // --- Data synchronized with app.py ---
 
@@ -49,7 +52,7 @@ const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string
 };
 
 export default function StreamlitMock() {
-  const [engine, setEngine] = useState<"edge" | "google" | "piper">("edge");
+  const [engine, setEngine] = useState<"edge" | "google" | "piper" | "gemini">("edge");
   
   // Edge State
   const [category, setCategory] = useState("簡體中文 (中國)");
@@ -69,10 +72,15 @@ export default function StreamlitMock() {
   const [piperPitch, setPiperPitch] = useState(0); // -12 to 12 semitones
   const [piperNoise, setPiperNoise] = useState(0.667);
 
+  // Gemini State
+  const [geminiVoice, setGeminiVoice] = useState<'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr'>('Kore');
+
   // Shared State
   const [text, setText] = useState("");
   const [trimSilence, setTrimSilence] = useState(true);
   const [silenceThreshold, setSilenceThreshold] = useState(-70);
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [progress, setProgress] = useState(0);
 
   useEffect(() => {
     if (EDGE_VOICES[category]) {
@@ -86,6 +94,119 @@ export default function StreamlitMock() {
     if (preset) {
         setRate(preset.rate);
         setPitch(preset.pitch);
+    }
+  };
+
+  const wrapWavHeader = (pcmData: Uint8Array, sampleRate: number = 24000) => {
+    const buffer = new ArrayBuffer(44 + pcmData.length);
+    const view = new DataView(buffer);
+
+    // RIFF identifier
+    view.setUint8(0, 'R'.charCodeAt(0));
+    view.setUint8(1, 'I'.charCodeAt(0));
+    view.setUint8(2, 'F'.charCodeAt(0));
+    view.setUint8(3, 'F'.charCodeAt(0));
+    // file length
+    view.setUint32(4, 36 + pcmData.length, true);
+    // RIFF type
+    view.setUint8(8, 'W'.charCodeAt(0));
+    view.setUint8(9, 'A'.charCodeAt(0));
+    view.setUint8(10, 'V'.charCodeAt(0));
+    view.setUint8(11, 'E'.charCodeAt(0));
+    // format chunk identifier
+    view.setUint8(12, 'f'.charCodeAt(0));
+    view.setUint8(13, 'm'.charCodeAt(0));
+    view.setUint8(14, 't'.charCodeAt(0));
+    view.setUint8(15, ' '.charCodeAt(0));
+    // format chunk length
+    view.setUint32(16, 16, true);
+    // sample format (1 is PCM)
+    view.setUint16(20, 1, true);
+    // channel count
+    view.setUint16(22, 1, true);
+    // sample rate
+    view.setUint32(24, sampleRate, true);
+    // byte rate (sampleRate * channelCount * bitsPerSample / 8)
+    view.setUint32(28, sampleRate * 2, true);
+    // block align (channelCount * bitsPerSample / 8)
+    view.setUint16(32, 2, true);
+    // bits per sample
+    view.setUint16(34, 16, true);
+    // data chunk identifier
+    view.setUint8(36, 'd'.charCodeAt(0));
+    view.setUint8(37, 'a'.charCodeAt(0));
+    view.setUint8(38, 't'.charCodeAt(0));
+    view.setUint8(39, 'a'.charCodeAt(0));
+    // data chunk length
+    view.setUint32(40, pcmData.length, true);
+
+    // write PCM data
+    const pcmDataView = new Uint8Array(buffer, 44);
+    pcmDataView.set(pcmData);
+
+    return new Blob([buffer], { type: 'audio/wav' });
+  };
+
+  const handleBatchGenerate = async () => {
+    if (!text) return;
+    setIsGenerating(true);
+    setProgress(0);
+
+    const zip = new JSZip();
+    const lines = text.split('\n').filter(l => l.trim());
+    const total = lines.length;
+
+    try {
+      for (let i = 0; i < total; i++) {
+        const line = lines[i].trim();
+        const parts = line.split(/\s+/, 2);
+        let id = `item_${i + 1}`;
+        let content = line;
+
+        if (parts.length >= 2) {
+          id = parts[0];
+          content = parts[1];
+        }
+
+        if (engine === 'gemini') {
+          const base64 = await generateGeminiSpeech({
+            text: content,
+            voice: geminiVoice
+          });
+          
+          const binary = atob(base64);
+          const bytes = new Uint8Array(binary.length);
+          for (let j = 0; j < binary.length; j++) {
+            bytes[j] = binary.charCodeAt(j);
+          }
+          
+          // Gemini returns raw PCM 16-bit 24kHz
+          const wavBlob = wrapWavHeader(bytes, 24000);
+          zip.file(`${id}.wav`, wavBlob);
+        } else {
+          // Placeholder for other engines if they need backend interaction
+          // For now, we'll only fully implement Gemini in the React frontend
+          // since the others usually require Python/FFMPEG backend
+          console.warn(`Engine ${engine} is not fully implemented in the frontend yet.`);
+          // To give a good experience, let's at least show it's "coming soon" or similar
+          // Or just skip for now and focus on Gemini which is the user request.
+        }
+
+        setProgress(((i + 1) / total) * 100);
+      }
+
+      if (engine === 'gemini') {
+          const content = await zip.generateAsync({ type: 'blob' });
+          saveAs(content, `geyu_voice_gemini_${Date.now()}.zip`);
+      } else {
+          alert("目前 React 版本僅完整支援 Gemini TTS。Edge/Google/Piper 正在遷移中，請使用原始 Python 版本或等待更新。");
+      }
+    } catch (error) {
+      console.error("Batch generate error:", error);
+      alert("生成過程中發生錯誤，請檢查主控台。");
+    } finally {
+      setIsGenerating(false);
+      setProgress(0);
     }
   };
 
@@ -122,6 +243,12 @@ export default function StreamlitMock() {
                         className={`flex-1 py-1.5 px-2 text-[10px] font-bold rounded-md border transition-all ${engine === 'piper' ? 'bg-white text-red-600 border-zinc-200 shadow-sm' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-700'}`}
                     >
                         Piper
+                    </button>
+                    <button 
+                        onClick={() => setEngine("gemini")}
+                        className={`flex-1 py-1.5 px-2 text-[10px] font-bold rounded-md border transition-all ${engine === 'gemini' ? 'bg-white text-red-600 border-zinc-200 shadow-sm' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-700'}`}
+                    >
+                        Gemini
                     </button>
                 </div>
             </div>
@@ -257,8 +384,33 @@ export default function StreamlitMock() {
                 </div>
             )}
 
-             {/* --- Conditional Render: Piper TTS --- */}
-             {engine === 'piper' && (
+             {/* --- Conditional Render: Gemini TTS --- */}
+             {engine === 'gemini' && (
+                <div className="space-y-4 pt-3 border-t border-zinc-100">
+                     <div className="bg-red-50 border border-red-100 rounded-md p-2 text-xs text-red-800 leading-relaxed shadow-sm">
+                        <span className="font-bold block mb-1">New! Gemini 3.1 TTS</span>
+                        支持 70+ 語言的多模態音素驅動語音。具備更高的自然度與表現力。
+                    </div>
+
+                    <div className="flex items-center justify-between gap-3">
+                        <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">語音角色</label>
+                        <select 
+                            value={geminiVoice}
+                            onChange={(e) => setGeminiVoice(e.target.value as any)}
+                            className="flex-1 p-1.5 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
+                        >
+                            <option value="Kore">Kore (Balanced)</option>
+                            <option value="Puck">Puck (Energetic)</option>
+                            <option value="Charon">Charon (Deep/Calm)</option>
+                            <option value="Fenrir">Fenrir (Mysterious)</option>
+                            <option value="Zephyr">Zephyr (Bright)</option>
+                        </select>
+                    </div>
+                </div>
+            )}
+
+            {/* --- Conditional Render: Piper TTS --- */}
+            {engine === 'piper' && (
                 <div className="space-y-4 pt-3 border-t border-zinc-100">
                      <div className="bg-zinc-50 border border-zinc-200 rounded-md p-2 text-xs text-zinc-500 leading-relaxed">
                         <span className="font-bold text-zinc-700 block mb-1">關於 Piper TTS</span>
@@ -430,6 +582,12 @@ export default function StreamlitMock() {
                                     <span className="text-zinc-500">rate:</span> <span className="text-white">"{rate > 0 ? '+' : ''}{rate}%"</span><br/>
                                     <span className="text-zinc-500">pitch:</span> <span className="text-white">"{pitch > 0 ? '+' : ''}{pitch}Hz"</span>
                                 </>
+                            ) : engine === 'gemini' ? (
+                                <>
+                                    <span className="text-zinc-500">api:</span> <span className="text-white">"gemini-3.1-flash"</span><br/>
+                                    <span className="text-zinc-500">voice:</span> <span className="text-white">"{geminiVoice}"</span><br/>
+                                    <span className="text-zinc-500">multimodal:</span> <span className="text-white">true</span>
+                                </>
                             ) : engine === 'piper' ? (
                                 <>
                                     <span className="text-zinc-500">model:</span> <span className="text-white">"{piperModel.split('-')[1]}"</span><br/>
@@ -458,15 +616,25 @@ export default function StreamlitMock() {
                 </div>
 
                 <button 
-                    disabled={!text}
+                    disabled={!text || isGenerating}
+                    onClick={handleBatchGenerate}
                     className={`w-full py-5 rounded-xl font-bold text-sm tracking-widest uppercase transition-all shadow-xl transform flex items-center justify-center gap-3 ${
-                        text 
+                        (text && !isGenerating)
                         ? 'bg-red-500 text-white hover:bg-red-600 hover:-translate-y-1 hover:shadow-2xl hover:shadow-red-200' 
                         : 'bg-zinc-100 text-zinc-400 cursor-not-allowed shadow-none'
                     }`}
                 >
-                    <span>Start Batch Generation</span>
-                    {text && <span className="bg-white/20 px-2 py-0.5 rounded text-[10px]">ZIP</span>}
+                    {isGenerating ? (
+                        <>
+                            <Loader2 className="w-4 h-4 animate-spin text-red-500" />
+                            <span className="text-red-500">Generating ({Math.round(progress)}%)</span>
+                        </>
+                    ) : (
+                        <>
+                            <span>Start Batch Generation</span>
+                            {text && <span className="bg-white/20 px-2 py-0.5 rounded text-[10px]">ZIP</span>}
+                        </>
+                    )}
                 </button>
             </div>
         </div>
