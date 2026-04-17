@@ -124,13 +124,10 @@ st.markdown("""
 VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
-        "zh-CN-XiaonuoNeural": "🇨🇳 小諾 (女聲 - 溫柔/適合兒童) 🧸",
-        "zh-CN-XiaomengNeural": "🇨🇳 小夢 (女聲 - 聊天隨興/新)",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
-        "zh-CN-XiaochenNeural": "🇨🇳 曉辰 (女聲 - 標準)",
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
+        "zh-CN-YunxiaNeural": "🇨🇳 雲夏 (女聲 - 溫馨/新發現!) ✨",
         "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
-        "zh-CN-YunzeNeural": "🇨🇳 雲澤 (男聲 - 情感豐富/新)",
         "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)",
     },
     "繁體中文 (台灣)": {
