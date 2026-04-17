@@ -257,18 +257,39 @@ def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, s
         final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
+def get_gemini_api_key():
+    """從環境變數或 .env 檔案獲取 API Key"""
+    # 優先從系統環境變量獲取
+    key = os.environ.get("GEMINI_API_KEY")
+    if key and len(key.strip()) > 10:
+        return key.strip()
+    
+    # 次之嘗試從 .env 檔案讀取 (AI Studio Build 環境)
+    try:
+        env_path = Path("/app/applet/.env")
+        if not env_path.exists():
+            env_path = Path(".env")
+            
+        if env_path.exists():
+            with open(env_path, "r") as f:
+                for line in f:
+                    if line.startswith("GEMINI_API_KEY="):
+                        return line.split("=", 1)[1].strip()
+    except Exception as e:
+        print(f"Error reading .env: {e}")
+        
+    return None
+
 def generate_audio_stream_gemini(text, voice_name):
     """
     使用 Gemini 3.1 Flash TTS 生成音訊
     """
-    api_key = os.environ.get("GEMINI_API_KEY")
+    api_key = get_gemini_api_key()
     if not api_key:
-        return {"error": "找不到 GEMINI_API_KEY 環境變數，請確認設定並重啟應用。"}
-    if len(api_key.strip()) < 10:
-        return {"error": "GEMINI_API_KEY 格式似乎不正確或太短。"}
+        return {"error": "找不到 GEMINI_API_KEY 環境變數或 .env 設定。"}
     
     try:
-        genai.configure(api_key=api_key.strip())
+        genai.configure(api_key=api_key)
         model = genai.GenerativeModel("models/gemini-3.1-flash-tts-preview")
         response = model.generate_content(
             text,
