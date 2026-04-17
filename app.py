@@ -263,10 +263,12 @@ def generate_audio_stream_gemini(text, voice_name):
     """
     api_key = os.environ.get("GEMINI_API_KEY")
     if not api_key:
-        return {"error": "找不到 GEMINI_API_KEY，請在設定中添加。"}
+        return {"error": "找不到 GEMINI_API_KEY 環境變數，請確認設定並重啟應用。"}
+    if len(api_key.strip()) < 10:
+        return {"error": "GEMINI_API_KEY 格式似乎不正確或太短。"}
     
     try:
-        genai.configure(api_key=api_key)
+        genai.configure(api_key=api_key.strip())
         model = genai.GenerativeModel("models/gemini-3.1-flash-tts-preview")
         response = model.generate_content(
             text,
