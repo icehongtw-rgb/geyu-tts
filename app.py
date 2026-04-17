@@ -124,9 +124,11 @@ st.markdown("""
 VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
+        "zh-CN-XiaonuoNeural": "🇨🇳 小諾 (女聲 - 溫柔/適合兒童) 🧸",
+        "zh-CN-XiaomengNeural": "🇨🇳 小夢 (女聲 - 聊天隨興)",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
-        "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
+        "zh-CN-YunjieNeural": "🇨🇳 雲傑 (男聲 - 情感豐富)",
         "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)",
     },
     "繁體中文 (台灣)": {
@@ -402,7 +404,7 @@ def main():
         st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)", "Fish Audio (動漫/中文最佳)", "ElevenLabs (情感/情感最強)"]
+        engine_options = ["Edge TTS (微軟/免密鑰/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)"]
         
         engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
         
@@ -423,39 +425,6 @@ def main():
         # ElevenLabs specific
         eleven_api_key = None
         eleven_voice_id = None
-        
-        # --- ELEVENLABS UI ---
-        if "ElevenLabs" in engine:
-            st.markdown("### 1. 語音")
-            st.success("🌟 已支援頂級 ElevenLabs API！")
-            
-            st.markdown("🔑 **API Key 設定**")
-            eleven_api_key = st.text_input("填入 ElevenLabs API Key", type="password", placeholder="從 Profile 取得的 xi-api-key")
-            
-            c1, c2 = st.columns([1, 2])
-            with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
-            with c2: 
-                selected_eleven_label = st.selectbox("核心角色", list(VOICES_ELEVEN.keys()), label_visibility="collapsed")
-                eleven_voice_id = VOICES_ELEVEN[selected_eleven_label]
-                
-            st.info("💡 提示：ElevenLabs 免費帳戶每月有 10,000 字元額度。")
-        
-        # --- FISH AUDIO UI ---
-        if "Fish Audio" in engine:
-            st.markdown("### 1. 語音")
-            st.success("🎉 全新支援 Fish Audio API (中文最佳推薦)！")
-            
-            st.markdown("🔑 **API Key 設定**")
-            fish_api_key = st.text_input("填入 Fish API Key", type="password", placeholder="例如: 83274d02...")
-            
-            c1, c2 = st.columns([1, 2])
-            with c1: st.markdown('<div class="row-label">角色 Model ID</div>', unsafe_allow_html=True)
-            with c2: 
-                # 讓用戶自行填寫 Fish Audio 網站上找到的 Model ID
-                fish_voice = st.text_input("Model ID", placeholder="(選填) 例如: 8fbd... 留空則使用預設", label_visibility="collapsed")
-                
-            st.info("💡 提示：前往 Fish Audio 官網 -> 找到喜歡的聲音 -> 點擊 API/分享 取得 Model ID。")
-            st.warning("⚠️ 注意：Fish Audio 的「網頁版每日免費」與「開發者 API 額度」是分開計費的！如果下方產生 402 Error，代表您的 API 帳戶需加值。")
         
         # --- EDGE TTS UI ---
         if "Edge" in engine:
