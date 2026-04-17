@@ -34,12 +34,6 @@ const GOOGLE_LANGS: Record<string, string> = {
     "英文 (en)": "en"
 };
 
-// Piper TTS Models
-const PIPER_MODELS: Record<string, string> = {
-    "zh_CN-huayan-medium": "🇨🇳 Huayan (華顏 - 自然女聲) 🔥",
-    "zh_CN-xiaou-medium": "🇨🇳 Xiaou (小優 - 溫柔女聲)"
-};
-
 const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string }> = {
     "general":      { rate: 0,   pitch: 0,   label: "預設 (General)" },
     "affectionate": { rate: -25, pitch: -5,  label: "❤️ 親切/哄孩子" },
@@ -52,7 +46,7 @@ const STYLE_PRESETS: Record<string, { rate: number; pitch: number; label: string
 };
 
 export default function StreamlitMock() {
-  const [engine, setEngine] = useState<"edge" | "google" | "piper" | "gemini">("edge");
+  const [engine, setEngine] = useState<"edge" | "google" | "gemini">("edge");
   
   // Edge State
   const [category, setCategory] = useState("簡體中文 (中國)");
@@ -65,12 +59,6 @@ export default function StreamlitMock() {
   // Google State
   const [googleLang, setGoogleLang] = useState("簡體中文 (zh-cn)");
   const [googleSlow, setGoogleSlow] = useState(false);
-
-  // Piper State
-  const [piperModel, setPiperModel] = useState("zh_CN-huayan-medium");
-  const [piperRate, setPiperRate] = useState(0); // -100 to 100
-  const [piperPitch, setPiperPitch] = useState(0); // -12 to 12 semitones
-  const [piperNoise, setPiperNoise] = useState(0.667);
 
   // Gemini State
   const [geminiVoice, setGeminiVoice] = useState<'Puck' | 'Charon' | 'Kore' | 'Fenrir' | 'Zephyr'>('Kore');
@@ -238,12 +226,6 @@ export default function StreamlitMock() {
                     >
                         Google TTS
                     </button>
-                     <button 
-                        onClick={() => setEngine("piper")}
-                        className={`flex-1 py-1.5 px-2 text-[10px] font-bold rounded-md border transition-all ${engine === 'piper' ? 'bg-white text-red-600 border-zinc-200 shadow-sm' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-700'}`}
-                    >
-                        Piper
-                    </button>
                     <button 
                         onClick={() => setEngine("gemini")}
                         className={`flex-1 py-1.5 px-2 text-[10px] font-bold rounded-md border transition-all ${engine === 'gemini' ? 'bg-white text-red-600 border-zinc-200 shadow-sm' : 'bg-transparent text-zinc-500 border-transparent hover:text-zinc-700'}`}
@@ -408,70 +390,6 @@ export default function StreamlitMock() {
                     </div>
                 </div>
             )}
-
-            {/* --- Conditional Render: Piper TTS --- */}
-            {engine === 'piper' && (
-                <div className="space-y-4 pt-3 border-t border-zinc-100">
-                     <div className="bg-zinc-50 border border-zinc-200 rounded-md p-2 text-xs text-zinc-500 leading-relaxed">
-                        <span className="font-bold text-zinc-700 block mb-1">關於 Piper TTS</span>
-                        本地離線生成，速度極快。初次使用需下載模型。
-                    </div>
-
-                    <div className="flex items-center justify-between gap-3">
-                        <label className="text-sm font-medium text-zinc-700 whitespace-nowrap min-w-[4rem]">模型選擇</label>
-                        <select 
-                            value={piperModel}
-                            onChange={(e) => setPiperModel(e.target.value)}
-                            className="flex-1 p-1.5 border border-zinc-200 rounded-lg bg-white text-sm focus:ring-1 focus:ring-red-500 focus:border-red-500 outline-none transition-shadow cursor-pointer hover:border-zinc-300"
-                        >
-                            {Object.entries(PIPER_MODELS).map(([key, name]) => (
-                                <option key={key} value={key}>{name}</option>
-                            ))}
-                        </select>
-                    </div>
-
-                    <div className="space-y-3 pt-2">
-                        <div className="group">
-                            <div className="flex justify-between text-xs mb-1 text-zinc-600">
-                                <span className="font-medium">語速 Speed</span>
-                                <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{piperRate > 0 ? '+' : ''}{piperRate}%</span>
-                            </div>
-                            <input 
-                                type="range" min="-100" max="100" 
-                                value={piperRate} 
-                                onChange={e => setPiperRate(Number(e.target.value))} 
-                                className="w-full h-1 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
-                            />
-                        </div>
-
-                         <div className="group">
-                            <div className="flex justify-between text-xs mb-1 text-zinc-600">
-                                <span className="font-medium">音調 Pitch (Post-proc)</span>
-                                <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{piperPitch > 0 ? '+' : ''}{piperPitch}</span>
-                            </div>
-                            <input 
-                                type="range" min="-12" max="12" 
-                                value={piperPitch} 
-                                onChange={e => setPiperPitch(Number(e.target.value))} 
-                                className="w-full h-1 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
-                            />
-                        </div>
-
-                         <div className="group">
-                            <div className="flex justify-between text-xs mb-1 text-zinc-600">
-                                <span className="font-medium">變化度 Noise</span>
-                                <span className="font-mono bg-red-50 px-1.5 py-0.5 rounded text-[10px] text-red-600">{piperNoise}</span>
-                            </div>
-                            <input 
-                                type="range" min="0.1" max="1.0" step="0.01"
-                                value={piperNoise} 
-                                onChange={e => setPiperNoise(Number(e.target.value))} 
-                                className="w-full h-1 bg-zinc-200 rounded-full appearance-none cursor-pointer accent-red-500 hover:accent-red-600" 
-                            />
-                        </div>
-                    </div>
-                </div>
-            )}
             
             <div className="pt-3 border-t border-zinc-100 space-y-3">
                 <label className="flex items-center gap-3 p-2 rounded-lg border border-transparent hover:bg-zinc-50 hover:border-zinc-100 transition-all cursor-pointer group">
@@ -572,7 +490,7 @@ export default function StreamlitMock() {
                          <div className="flex items-center gap-2 border-b border-zinc-800 pb-3 mb-3">
                             <Terminal className="w-3.5 h-3.5 text-zinc-500" />
                             <span className="text-[10px] text-zinc-500 uppercase tracking-widest font-mono">
-                                {engine === 'edge' ? 'edge-tts' : (engine === 'piper' ? 'piper-tts' : 'google-tts')}
+                                {engine === 'edge' ? 'edge-tts' : (engine === 'gemini' ? 'gemini-tts' : 'google-tts')}
                             </span>
                          </div>
                          <code className="block font-mono text-xs text-zinc-300 leading-loose whitespace-pre-wrap break-all">
@@ -587,13 +505,6 @@ export default function StreamlitMock() {
                                     <span className="text-zinc-500">api:</span> <span className="text-white">"gemini-3.1-flash"</span><br/>
                                     <span className="text-zinc-500">voice:</span> <span className="text-white">"{geminiVoice}"</span><br/>
                                     <span className="text-zinc-500">multimodal:</span> <span className="text-white">true</span>
-                                </>
-                            ) : engine === 'piper' ? (
-                                <>
-                                    <span className="text-zinc-500">model:</span> <span className="text-white">"{piperModel.split('-')[1]}"</span><br/>
-                                    <span className="text-zinc-500">speed:</span> <span className="text-white">"{piperRate}%"</span><br/>
-                                    <span className="text-zinc-500">pitch:</span> <span className="text-white">"{piperPitch}st"</span><br/>
-                                    <span className="text-zinc-500">noise:</span> <span className="text-white">"{piperNoise}"</span>
                                 </>
                             ) : (
                                 <>
@@ -611,7 +522,7 @@ export default function StreamlitMock() {
                     </div>
 
                     <p className="text-xs text-zinc-500 leading-relaxed">
-                        系統將自動為每一行文字生成獨立的 MP3 檔案，並打包為 ZIP 下載。
+                        系統將自動為每一行文字生成獨立的音檔，並打包為 ZIP 下載。
                     </p>
                 </div>
 

@@ -15,7 +15,6 @@ from pathlib import Path
 # --- 1. 環境檢測 ---
 HAS_FFMPEG = False
 HAS_PYDUB = False
-HAS_PIPER = False
 
 if shutil.which("ffmpeg"):
     HAS_FFMPEG = True
@@ -25,12 +24,6 @@ try:
     HAS_PYDUB = True
 except ImportError:
     HAS_PYDUB = False
-
-try:
-    from piper.voice import PiperVoice
-    HAS_PIPER = True
-except ImportError:
-    HAS_PIPER = False
 
 # --- 2. 設定頁面 ---
 st.set_page_config(page_title="格育 - 兒童語音工具", page_icon="🧩", layout="wide")
@@ -58,11 +51,11 @@ st.markdown("""
     }
     
     [data-testid="stSidebar"] [data-testid="stVerticalBlock"] {
-        gap: 0.5rem !important;
+        gap: 0.85rem !important;
     }
     
     .stSelectbox, .stSlider, .stRadio, .stCheckbox {
-        margin-bottom: -5px !important;
+        margin-bottom: 2px !important;
     }
     
     h2 {
@@ -154,22 +147,6 @@ LANG_GOOGLE = {
     "英文 (en)": "en"
 }
 
-# PIPER TTS CONFIG
-PIPER_MODELS = {
-    "zh_CN-huayan-medium": {
-        "name": "🇨🇳 Huayan (華顏 - 自然女聲) 🔥",
-        "repo": "rhasspy/piper-voices",
-        "file_onnx": "zh_CN/huayan/medium/zh_CN-huayan-medium.onnx",
-        "file_json": "zh_CN/huayan/medium/zh_CN-huayan-medium.onnx.json"
-    },
-    "zh_CN-xiaou-medium": {
-        "name": "🇨🇳 Xiaou (小優 - 溫柔女聲)",
-        "repo": "rhasspy/piper-voices",
-        "file_onnx": "zh_CN/xiaou/medium/zh_CN-xiaou-medium.onnx",
-        "file_json": "zh_CN/xiaou/medium/zh_CN-xiaou-medium.onnx.json"
-    }
-}
-
 # GEMINI TTS CONFIG
 VOICES_GEMINI = {
     "Kore": "Kore (Balanced - 平衡推薦)",
@@ -249,69 +226,6 @@ def trim_silence(audio_bytes, threshold=-70.0):
     except: pass 
     return audio_bytes
 
-def adjust_pitch_ffmpeg(audio_bytes, n_semitones):
-    """使用 pydub/ffmpeg 調整音調 (Post-processing)"""
-    if not HAS_PYDUB or not HAS_FFMPEG or n_semitones == 0:
-        return audio_bytes
-    try:
-        audio = AudioSegment.from_file(io.BytesIO(audio_bytes), format="mp3")
-        # 簡單變調算法 (改變採樣率) - 會有"花栗鼠"效應 (Chipmunk effect) 但最穩定
-        # 如果需要保持時長的變調，需要更復雜的 DSP
-        new_sample_rate = int(audio.frame_rate * (2.0 ** (n_semitones / 12.0)))
-        pitched = audio._spawn(audio.raw_data, overrides={'frame_rate': new_sample_rate})
-        pitched = pitched.set_frame_rate(audio.frame_rate)
-        
-        out = io.BytesIO()
-        pitched.export(out, format="mp3")
-        return out.getvalue()
-    except:
-        return audio_bytes
-
-# --- 6. Piper 模型管理 ---
-MODELS_DIR = Path("piper_models")
-MODELS_DIR.mkdir(exist_ok=True)
-
-def download_file(url, local_path):
-    """直接使用 requests 下載文件，避免 huggingface_hub 的認證問題"""
-    try:
-        with requests.get(url, stream=True) as r:
-            r.raise_for_status()
-            with open(local_path, 'wb') as f:
-                for chunk in r.iter_content(chunk_size=8192):
-                    f.write(chunk)
-        return True
-    except Exception as e:
-        if os.path.exists(local_path):
-            os.remove(local_path) # 清理失敗的文件
-        raise e
-
-def get_piper_model_path(model_key):
-    """確保模型存在，若無則下載"""
-    if not HAS_PIPER: return None, None
-    
-    config = PIPER_MODELS[model_key]
-    onnx_path = MODELS_DIR / f"{model_key}.onnx"
-    json_path = MODELS_DIR / f"{model_key}.onnx.json"
-    
-    if not onnx_path.exists() or not json_path.exists():
-        with st.spinner(f"正在下載 Piper 模型 {config['name']} (首次運行需時較長)..."):
-            try:
-                # 構建直接下載 URL
-                # 格式: https://huggingface.co/datasets/{repo_id}/resolve/main/{path}
-                base_url = f"https://huggingface.co/datasets/{config['repo']}/resolve/main"
-                
-                url_onnx = f"{base_url}/{config['file_onnx']}"
-                url_json = f"{base_url}/{config['file_json']}"
-                
-                download_file(url_onnx, onnx_path)
-                download_file(url_json, json_path)
-                
-            except Exception as e:
-                st.error(f"模型下載失敗: {e}")
-                return None, None
-
-    return str(onnx_path), str(json_path)
-
 # --- 7. 生成邏輯 ---
 async def generate_audio_stream_edge(text, voice, rate_val, volume_val, pitch_val, remove_silence=False, silence_threshold=-70.0):
     rate_str = f"{rate_val:+d}%"
@@ -336,58 +250,6 @@ def generate_audio_stream_google(text, lang, slow=False, remove_silence=False, s
         final_bytes = trim_silence(final_bytes, silence_threshold)
     return final_bytes
 
-def generate_audio_stream_piper(text, model_key, speed_slider, noise_scale, pitch_semitones, remove_silence=False, silence_threshold=-70.0):
-    """
-    speed_slider: -100 (Slow) to 100 (Fast).
-    Piper length_scale: >1 Slow, <1 Fast. Default 1.0.
-    """
-    if not HAS_PIPER: return b""
-    
-    onnx_path, json_path = get_piper_model_path(model_key)
-    if not onnx_path: return b""
-
-    # Map Slider (-100 to 100) to Piper Length Scale (0.5 to 2.0 approx)
-    # Slider 0 = 1.0
-    # Slider 100 (Fast) = 0.6 (Short duration)
-    # Slider -100 (Slow) = 1.5 (Long duration)
-    if speed_slider >= 0:
-        # Fast: 1.0 -> 0.6
-        length_scale = 1.0 - (speed_slider / 250.0) 
-    else:
-        # Slow: 1.0 -> 1.5
-        length_scale = 1.0 + (abs(speed_slider) / 200.0)
-
-    try:
-        voice = PiperVoice.load(onnx_path, config_path=json_path)
-        
-        # Piper outputs raw 16-bit 22050Hz PCM usually
-        wav_io = io.BytesIO()
-        with wave.open(wav_io, "wb") as wav_file:
-            voice.synthesize(text, wav_file, length_scale=length_scale, noise_scale=noise_scale)
-        
-        # Convert Wav to MP3 using PyDub
-        wav_io.seek(0)
-        audio = AudioSegment.from_wav(wav_io)
-        
-        # Apply Pitch Shift (Post-processing)
-        if pitch_semitones != 0:
-             # Using the adjust function defined earlier (simple resampling)
-             new_sample_rate = int(audio.frame_rate * (2.0 ** (pitch_semitones / 12.0)))
-             audio = audio._spawn(audio.raw_data, overrides={'frame_rate': new_sample_rate})
-             audio = audio.set_frame_rate(22050) # Reset to standard
-
-        out_mp3 = io.BytesIO()
-        audio.export(out_mp3, format="mp3")
-        final_bytes = out_mp3.getvalue()
-        
-        if remove_silence:
-            final_bytes = trim_silence(final_bytes, silence_threshold)
-        return final_bytes
-
-    except Exception as e:
-        print(f"Piper Error: {e}")
-        return b""
-
 def generate_audio_stream_gemini(text, voice_name):
     """
     使用 Gemini 3.1 Flash TTS 生成音頻
@@ -398,8 +260,6 @@ def generate_audio_stream_gemini(text, voice_name):
     
     try:
         model = genai.GenerativeModel("gemini-3.1-flash-tts-preview")
-        # Python SDK uses different structure than Node.js sometimes, 
-        # but the current preview SDK for TTS specifically uses modality config
         response = model.generate_content(
             text,
             generation_config=genai.types.GenerationConfig(
@@ -413,14 +273,12 @@ def generate_audio_stream_gemini(text, voice_name):
                 )
             )
         )
-        # Extract audio bytes from the first candidate's part
         audio_part = response.candidates[0].content.parts[0]
         if hasattr(audio_part, 'inline_data'):
             pcm_data = audio_part.inline_data.data
         else:
             return b""
             
-        # Wrap PCM into WAV
         return wrap_wav_header(pcm_data, 24000)
     except Exception as e:
         print(f"Gemini TTS Error: {e}")
@@ -432,10 +290,7 @@ def main():
         st.markdown("## 參數設定")
         
         # 引擎選擇
-        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"]
-        if HAS_PIPER and HAS_FFMPEG:
-             engine_options.append("Piper TTS (本地/快速)")
-        engine_options.append("Gemini 3.1 TTS (谷歌/最新)")
+        engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)", "Gemini 3.1 TTS (谷歌/最新)"]
         
         engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
         
@@ -447,10 +302,6 @@ def main():
         pitch = 0
         volume = 0
         
-        # Piper specific
-        piper_model = None
-        piper_noise = 0.667
-
         # Gemini specific
         gemini_voice = None
         
@@ -488,22 +339,6 @@ def main():
                 selected_lang_code = LANG_GOOGLE[selected_lang_label]
             google_slow = st.checkbox("慢速模式 (Slow Mode)", value=False)
 
-        # --- PIPER TTS UI ---
-        elif "Piper" in engine:
-            st.markdown("### 1. 模型")
-            st.info("Piper 為本地離線生成，速度極快。首次使用需下載模型。")
-            c1, c2 = st.columns([1, 2])
-            with c1: st.markdown('<div class="row-label">模型選擇</div>', unsafe_allow_html=True)
-            with c2: 
-                piper_model = st.selectbox("模型", list(PIPER_MODELS.keys()), format_func=lambda x: PIPER_MODELS[x]['name'], label_visibility="collapsed")
-            
-            st.markdown("### 2. 參數")
-            # Reuse 'rate' variable for Piper Speed mapping
-            rate = st.slider("語速 (Speed)", -100, 100, 0, format="%d%%", help="控制發音長度 (Length Scale)")
-            # Reuse 'pitch' variable for Semitones
-            pitch = st.slider("音調 (Pitch)", -12, 12, 0, format="%d", help="後處理變調 (Semitones)。注意：會改變音色。")
-            piper_noise = st.slider("語氣變化 (Noise)", 0.1, 1.0, 0.667, step=0.01, help="控制語音的隨機變化程度 (Noise Scale)")
-
         # --- GEMINI TTS UI ---
         elif "Gemini" in engine:
             st.markdown("### 1. 語音")
@@ -521,19 +356,16 @@ def main():
         
         # Status Bar
         if HAS_PYDUB and HAS_FFMPEG:
-            status_html = '<div class="status-ok"><span>●</span> 環境完整'
-            if HAS_PIPER: status_html += ' (+Piper)'
-            status_html += '</div>'
-            st.markdown(status_html, unsafe_allow_html=True)
+            st.markdown('<div class="status-ok"><span>●</span> 環境完整</div>', unsafe_allow_html=True)
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
-        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / QUAD-ENGINE</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / TRI-ENGINE</div>", unsafe_allow_html=True)
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
     
     placeholder_txt = "001 蘋果\n002 香蕉\n1-1 第一課\n\n(若未輸入編號，系統將自動產生)"
-    text_input = st.text_area("輸入內容 (編號 內容)", height=450, placeholder=placeholder_txt)
+    text_input = st.text_area("輸入內容 (編號 內容)", height=320, placeholder=placeholder_txt)
     
     items = []
     lines = text_input.split('\n')
@@ -560,9 +392,6 @@ def main():
                         data = asyncio.run(generate_audio_stream_edge(txt, selected_voice, rate, volume, pitch, remove_silence_opt, silence_threshold))
                     elif "Google" in engine:
                         data = generate_audio_stream_google(txt, selected_lang_code, google_slow, remove_silence_opt, silence_threshold)
-                    elif "Piper" in engine:
-                        # Rate passed as slider value (-100 to 100), Pitch as semitones (-12 to 12)
-                        data = generate_audio_stream_piper(txt, piper_model, rate, piper_noise, pitch, remove_silence_opt, silence_threshold)
                     elif "Gemini" in engine:
                         data = generate_audio_stream_gemini(txt, gemini_voice)
                         
