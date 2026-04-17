@@ -9,6 +9,7 @@ import sys
 import os
 import wave
 import requests
+import google.generativeai as genai
 from pathlib import Path
 
 # --- 1. 環境檢測 ---
@@ -169,6 +170,15 @@ PIPER_MODELS = {
     }
 }
 
+# GEMINI TTS CONFIG
+VOICES_GEMINI = {
+    "Kore": "Kore (Balanced - 平衡推薦)",
+    "Puck": "Puck (Energetic - 活力)",
+    "Charon": "Charon (Deep/Calm - 深沉)",
+    "Fenrir": "Fenrir (Mysterious - 神秘)",
+    "Zephyr": "Zephyr (Bright - 明亮)"
+}
+
 # EDGE STYLES
 STYLE_PRESETS = {
     "general":      {"rate": 0,   "pitch": 0},
@@ -203,6 +213,23 @@ def update_sliders():
         st.session_state.pitch_val = STYLE_PRESETS[selected_style]["pitch"]
 
 # --- 5. 輔助功能 ---
+def get_gemini_client():
+    api_key = os.environ.get("GEMINI_API_KEY")
+    if not api_key:
+        return None
+    genai.configure(api_key=api_key)
+    return True
+
+def wrap_wav_header(pcm_data, sample_rate=24000):
+    """將原始 PCM 16-bit 數據封裝成 WAV 格式"""
+    with io.BytesIO() as wav_io:
+        with wave.open(wav_io, "wb") as wav_file:
+            wav_file.setnchannels(1)  # Mono
+            wav_file.setsampwidth(2) # 16-bit
+            wav_file.setframerate(sample_rate)
+            wav_file.writeframes(pcm_data)
+        return wav_io.getvalue()
+
 def trim_silence(audio_bytes, threshold=-70.0):
     if not HAS_PYDUB or not HAS_FFMPEG: return audio_bytes 
     try:
@@ -361,6 +388,44 @@ def generate_audio_stream_piper(text, model_key, speed_slider, noise_scale, pitc
         print(f"Piper Error: {e}")
         return b""
 
+def generate_audio_stream_gemini(text, voice_name):
+    """
+    使用 Gemini 3.1 Flash TTS 生成音頻
+    Gemini 返回的是原始 PCM 16-bit 24kHz 數據
+    """
+    if not get_gemini_client():
+        return b""
+    
+    try:
+        model = genai.GenerativeModel("gemini-3.1-flash-tts-preview")
+        # Python SDK uses different structure than Node.js sometimes, 
+        # but the current preview SDK for TTS specifically uses modality config
+        response = model.generate_content(
+            text,
+            generation_config=genai.types.GenerationConfig(
+                response_modalities=["AUDIO"],
+                speech_config=genai.types.SpeechConfig(
+                    voice_config=genai.types.VoiceConfig(
+                        prebuilt_voice_config=genai.types.PrebuiltVoiceConfig(
+                            voice_name=voice_name
+                        )
+                    )
+                )
+            )
+        )
+        # Extract audio bytes from the first candidate's part
+        audio_part = response.candidates[0].content.parts[0]
+        if hasattr(audio_part, 'inline_data'):
+            pcm_data = audio_part.inline_data.data
+        else:
+            return b""
+            
+        # Wrap PCM into WAV
+        return wrap_wav_header(pcm_data, 24000)
+    except Exception as e:
+        print(f"Gemini TTS Error: {e}")
+        return b""
+
 # --- 7. 介面邏輯 ---
 def main():
     with st.sidebar:
@@ -370,6 +435,7 @@ def main():
         engine_options = ["Edge TTS (微軟/高音質)", "Google TTS (谷歌/標準)"]
         if HAS_PIPER and HAS_FFMPEG:
              engine_options.append("Piper TTS (本地/快速)")
+        engine_options.append("Gemini 3.1 TTS (谷歌/最新)")
         
         engine = st.radio("TTS 引擎庫", engine_options, label_visibility="collapsed")
         
@@ -384,6 +450,9 @@ def main():
         # Piper specific
         piper_model = None
         piper_noise = 0.667
+
+        # Gemini specific
+        gemini_voice = None
         
         # --- EDGE TTS UI ---
         if "Edge" in engine:
@@ -435,6 +504,15 @@ def main():
             pitch = st.slider("音調 (Pitch)", -12, 12, 0, format="%d", help="後處理變調 (Semitones)。注意：會改變音色。")
             piper_noise = st.slider("語氣變化 (Noise)", 0.1, 1.0, 0.667, step=0.01, help="控制語音的隨機變化程度 (Noise Scale)")
 
+        # --- GEMINI TTS UI ---
+        elif "Gemini" in engine:
+            st.markdown("### 1. 語音")
+            st.success("New! Gemini 3.1 Flash TTS 現已推出。支援 70+ 語言的多模態生成。")
+            c1, c2 = st.columns([1, 2])
+            with c1: st.markdown('<div class="row-label">角色選擇</div>', unsafe_allow_html=True)
+            with c2: 
+                gemini_voice = st.selectbox("角色", list(VOICES_GEMINI.keys()), format_func=lambda x: VOICES_GEMINI[x], label_visibility="collapsed")
+
         st.markdown("---")
         remove_silence_opt = st.checkbox("智能去靜音", value=True, disabled=not(HAS_PYDUB and HAS_FFMPEG))
         silence_threshold = -70
@@ -449,7 +527,7 @@ def main():
             st.markdown(status_html, unsafe_allow_html=True)
         else:
             st.markdown('<div class="status-err"><span>○</span> 環境缺失 (需 ffmpeg)</div>', unsafe_allow_html=True)
-        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / TRI-ENGINE</div>", unsafe_allow_html=True)
+        st.markdown("<div style='text-align: center; color: #a1a1aa; font-size: 10px; font-family: monospace;'>VERSION 1.1.0 / QUAD-ENGINE</div>", unsafe_allow_html=True)
 
     st.title("兒童語音合成工具")
     st.markdown("專為教材製作設計的批量生成引擎。")
@@ -485,8 +563,10 @@ def main():
                     elif "Piper" in engine:
                         # Rate passed as slider value (-100 to 100), Pitch as semitones (-12 to 12)
                         data = generate_audio_stream_piper(txt, piper_model, rate, piper_noise, pitch, remove_silence_opt, silence_threshold)
+                    elif "Gemini" in engine:
+                        data = generate_audio_stream_gemini(txt, gemini_voice)
                         
-                    zf.writestr(f"{fname}.mp3", data)
+                    zf.writestr(f"{fname}.wav" if "Gemini" in engine else f"{fname}.mp3", data)
                 except Exception as e:
                     st.error(f"{fname} 失敗: {e}")
                 prog.progress((i+1)/len(items))
