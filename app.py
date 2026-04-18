@@ -125,10 +125,15 @@ VOICES_EDGE = {
     "簡體中文 (中國)": {
         "zh-CN-XiaoxiaoNeural": "🇨🇳 小曉 (女聲 - 活潑/推薦) 🔥",
         "zh-CN-XiaoyiNeural": "🇨🇳 小藝 (女聲 - 氣質)",
+        "zh-CN-XiaohanNeural": "🇨🇳 曉涵 (女聲 - 溫暖/經典) ❤️",
+        "zh-CN-XiaomoNeural": "🇨🇳 曉墨 (女聲 - 故事/情感)",
+        "zh-CN-XiaoxuanNeural": "🇨🇳 曉萱 (女聲 - 活潑/熱情)",
+        "zh-CN-XiaoruiNeural": "🇨🇳 曉睿 (女聲 - 清晰/專業)",
         "zh-CN-YunxiNeural": "🇨🇳 雲希 (男聲 - 帥氣)",
-        "zh-CN-YunxiaNeural": "🇨🇳 雲夏 (女聲 - 溫馨/新發現!) ✨",
         "zh-CN-YunjianNeural": "🇨🇳 雲健 (男聲 - 體育)",
         "zh-CN-YunyangNeural": "🇨🇳 雲揚 (男聲 - 專業/播音)",
+        "zh-CN-YunhaoNeural": "🇨🇳 雲皓 (男聲 - 陽光/自然)",
+        "zh-CN-YunxiaNeural": "🇨🇳 雲夏 (女聲 - 溫馨) ✨",
     },
     "繁體中文 (台灣)": {
         "zh-TW-HsiaoChenNeural": "🇹🇼 曉臻 (女聲 - 溫柔/標準)",
